@@ -4,6 +4,7 @@
 static usart_buffer_t usart1_buffer;
 static usart_buffer_t usart2_buffer;
 static usart_buffer_t usart3_buffer;
+static usart_buffer_t usart4_buffer;
 
 
 //for printf
@@ -34,6 +35,8 @@ static void do_usart_buffer_init(usart_buffer_t * buff, int id)
 		buff->usart = USART2;
 	if( id == 3 )
 		buff->usart = USART3;
+	if( id == 4 )
+		buff->usart = UART4;
 }
 int  do_usart_buffer_check(int id, int init)
 {
@@ -41,6 +44,7 @@ int  do_usart_buffer_check(int id, int init)
 	if( id == 1 ) buff = &usart1_buffer;
 	else if( id == 2 ) buff = &usart2_buffer;
 	else if( id == 3 ) buff = &usart3_buffer;
+	else if( id == 4 ) buff = &usart4_buffer;
 	else return -1;
 
 	if( buff->buffer_overflow == 1 )
@@ -104,6 +108,7 @@ int do_read_usart(int id, uint8_t *buffer, int len)
 	if( id == 1 ) buff = &usart1_buffer;
 	else if( id == 2 ) buff = &usart2_buffer;
 	else if( id == 3 ) buff = &usart3_buffer;
+	else if( id == 4 ) buff = &usart4_buffer;
 	else return -1;
 
 	cp_len = len < buff->rx_len ? len:buff->rx_len;
@@ -119,6 +124,7 @@ int do_write_usart(int id, uint8_t *buffer, int len)
 	if( id == 1 ) buff = &usart1_buffer;
 	else if( id == 2 ) buff = &usart2_buffer;
 	else if( id == 3 ) buff = &usart3_buffer;
+	else if( id == 4 ) buff = &usart4_buffer;
 	else return -1;
 
 	for( i =0; i< len; i++ )
@@ -133,6 +139,7 @@ static void usart_irq_handler(int id)
 	if( id == 1 ) buff = &usart1_buffer;
 	else if( id == 2 ) buff = &usart2_buffer;
 	else if( id == 3 ) buff = &usart3_buffer;
+	else if( id == 4 ) buff = &usart4_buffer;
 	else return ;
 
 	/* Check if we were called because of RXNE. */
@@ -257,6 +264,42 @@ int usart3_setup(uint32_t baud,uint32_t bit, uint32_t stopbit, uint32_t parity, 
 	return id;
 }
 
+int usart4_setup(uint32_t baud,uint32_t bit, uint32_t stopbit, uint32_t parity, uint32_t mode)
+{//return id
+	int id = 4;
+	do_usart_buffer_init(&usart4_buffer, id);
+	/* Enable clocks for GPIO port A (for GPIO_USART1_TX) and USART1. */
+	rcc_periph_clock_enable(RCC_GPIOC);
+	rcc_periph_clock_enable(RCC_AFIO);
+	rcc_periph_clock_enable(RCC_UART4);
+
+	/* Enable the USART1 interrupt. */
+	nvic_enable_irq(NVIC_UART4_IRQ);
+
+	/* Setup GPIO pin GPIO_USART1_RE_TX on GPIO port B for transmit. */
+	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ,
+		      GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_UART4_TX);
+	/* Setup GPIO pin GPIO_USART1_RE_RX on GPIO port B for receive. */
+	gpio_set_mode(GPIOC, GPIO_MODE_INPUT,
+		      GPIO_CNF_INPUT_FLOAT, GPIO_UART4_RX);
+
+	/* Setup UART parameters. */
+	usart_set_baudrate(UART4, baud);//115200
+	usart_set_databits(UART4, bit);//8
+	usart_set_stopbits(UART4, stopbit);//USART_STOPBITS_1);
+	usart_set_parity(UART4, parity);//USART_PARITY_NONE);
+	usart_set_flow_control(UART4, USART_FLOWCONTROL_NONE);
+	usart_set_mode(UART4, mode);//USART_MODE_TX_RX);
+
+	#ifdef UART4_USE_IRQ
+	/* Enable USART1 Receive interrupt. */
+	UART4_CR1(UART4) |= USART_CR1_RXNEIE;
+	#endif
+
+	/* Finally enable the USART. */
+	usart_enable(UART4);
+	return id;
+}
 
 #ifdef USART1_USE_IRQ
 void usart1_isr(void)
@@ -276,3 +319,7 @@ void usart3_isr(void)
 	usart_irq_handler(3);
 }
 #endif
+void uart4_isr()
+{
+	usart_irq_handler(4);
+}
