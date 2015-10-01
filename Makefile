@@ -262,7 +262,7 @@ $(LDSCRIPT):
 clean:
 	@#printf "  CLEAN\n"
 	$(Q)rm -f *.o *.d *.elf *.bin *.hex *.srec *.list *.map
-	$(Q)rm -f src/*.o
+	$(Q)rm -f src/*.o src/*.d
 
 stylecheck: $(STYLECHECKFILES:=.stylecheck)
 styleclean: $(STYLECHECKFILES:=.styleclean)

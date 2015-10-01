@@ -42,6 +42,7 @@ void px4_send_sbus_data(uint16_t *values, uint16_t num_values)
       			offset += 11;
     		}
 
+	//	do_write_usart(SBUS_USART_ID,oframe,SBUS_FRAME_SIZE);
 		//Serial.write(oframe, SBUS_FRAME_SIZE);
 		//write(sbus_fd, oframe, SBUS_FRAME_SIZE);
 	}
@@ -56,4 +57,37 @@ static uint8_t bcc_checksum(uint8_t *buf, int len)
 	return checksum;
 }
 
+void do_formate_rc_to_sbus(uint16_t *values, uint16_t num_values,uint8_t *oframe)
+{
+	uint8_t byteindex = 1; /*Data starts one byte into the sbus frame. */
+	uint8_t offset = 0;
+	uint16_t value;
+	//uint8_t oframe[SBUS_FRAME_SIZE] = { 0x0f };
+	int i;
+	oframe[0]=0x0f;
+
+
+	if (1==1) {
+		/* 16 is sbus number of servos/channels minus 2 single bit channels.
+		* currently ignoring single bit channels.  */
+		for (i = 0; (i < num_values) && (i < 16); ++i) {
+	    		value = (uint16_t)(((values[i] - SBUS_SCALE_OFFSET) / SBUS_SCALE_FACTOR) + 0.5f);
+	    		/*protect from out of bounds values and limit to 11 bits*/
+	    		if (value > 0x07ff) {
+				value = 0x07ff;
+	    		}
+			while (offset >= 8) {
+				++byteindex;
+				offset -= 8;
+      			}
+      			oframe[byteindex] |= (value << (offset)) & 0xff;
+      			oframe[byteindex + 1] |= (value >> (8 - offset)) & 0xff;
+      			oframe[byteindex + 2] |= (value >> (16 - offset)) & 0xff;
+      			offset += 11;
+    		}
+
+		//Serial.write(oframe, SBUS_FRAME_SIZE);
+		//write(sbus_fd, oframe, SBUS_FRAME_SIZE);
+	}
+}
 

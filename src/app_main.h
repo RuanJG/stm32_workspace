@@ -7,12 +7,15 @@
 #include <libopencm3/cm3/nvic.h>
 #include <mavlink.h>
 
-
 #define DEBUG_APP 1
 #define log(format, ...) if( DEBUG_APP ) printf(format, ## __VA_ARGS__)
 
 #define RADIO_USART_ID usart2_id
 #define COPTER_USART_ID usart1_id
 #define SBUS_USART_ID usart3_id
+
+//choose one of task
+#define LOOP_TWO_MAVLINK_IN
+//#define LOOP_ONE_MAVLINK_ONE_SBUS
 
 #endif
