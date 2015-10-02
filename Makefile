@@ -10,6 +10,7 @@ OBJS += $(C_SRC:%.c=%.o)
 CFLAGS += -I ./mavlinkNew
 
 LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
+BOARD_CONFIG = \"lisa_s_1.0.h\"
 
 
 
