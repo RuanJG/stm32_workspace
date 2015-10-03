@@ -62,8 +62,8 @@
 
 // disable and enable irq functions are not implemented in libopencm3 defining them here
 // XXX: consider moving this definitions into libopencm3
-static inline void __disable_irq(void)  { asm volatile("cpsid i"); }
-static inline void __enable_irq(void)   { asm volatile("cpsie i"); }
+static inline void __disable_irq(void)  { __asm__ __volatile__("cpsid i");/*asm volatile("cpsid i");*/ }
+static inline void __enable_irq(void)   { __asm__ __volatile__("cpsie i");/*asm volatile("cpsie i"); */ }
 
 // Critical Zones
 

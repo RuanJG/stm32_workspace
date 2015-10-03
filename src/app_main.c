@@ -18,9 +18,13 @@ void do_echo(struct uart_periph *uart)
 
 int main(void)
 {
-	mcu_init();
+	int i;
+	mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
 	while(1){
+		//do_echo(&uart3);
 		do_echo(&uart1);
+		do_echo(&uart2);
+		do_echo(&uart3);
 		__asm__("nop");
 	}
 	return 0;

@@ -7,13 +7,33 @@ C_SRC+= $(shell find  ./src -name '*.c')
 C_SRC+= $(shell find  ./ppz_stm32 -name '*.c')
 OBJS += $(ASM_SRC:%.s=%.o)
 OBJS += $(C_SRC:%.c=%.o)
-
+LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
 CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
-CFLAGS += -DBOARD_CONFIG=\<lisa_l_1.0.h\>
-CFLAGS += -DUSE_UART1=1
 CFLAGS += -std=c99
 
-LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
+CFLAGS += -DBOARD_CONFIG=\<lisa_l_1.0.h\>
+CFLAGS += -DPERIPHERALS_AUTO_INIT
+
+CFLAGS += -DUSE_UART1=1
+CFLAGS += -DUSE_UART2=1
+CFLAGS += -DUSE_UART3=1
+CFLAGS += -DUSE_UART5=1
+CFLAGS += -DUART1_BAUD=115200
+CFLAGS += -DUART2_BAUD=115200
+CFLAGS += -DUART3_BAUD=115200
+CFLAGS += -DUART5_BAUD=115200
+
+CFLAGS += -DGPIOE
+#CFLAGS += -DGPIOF
+#CFLAGS += -DGPIOG
+#CFLAGS += -DGPIOH
+#CFLAGS += -DGPIOI
+
+#CFLAGS += -DUSE_I2C0=1
+#CFLAGS += -DUSE_I2C1=1
+#CFLAGS += -DUSE_I2C2=1
+#CFLAGS += -DUSE_I2C3=1
+
 
 
 
@@ -268,7 +288,7 @@ clean:
 	@#printf "  CLEAN\n"
 	$(Q)rm -f *.o *.d *.elf *.bin *.hex *.srec *.list *.map
 	$(Q)rm -f src/*.o src/*.d
-	aa=find  ./ppz_stm32 -name '*.o' && rm $(aa)
+	$(Q)rm -f ppz_stm32/*.o ppz_stm32/*.d ppz_stm32/mcu_periph/*.o ppz_stm32/mcu_periph/*.d
 
 stylecheck: $(STYLECHECKFILES:=.stylecheck)
 styleclean: $(STYLECHECKFILES:=.styleclean)

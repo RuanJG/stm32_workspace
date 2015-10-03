@@ -7,34 +7,6 @@
 #define EXT_CLK 8000000
 #define AHB_CLK 72000000
 
-/* GPIO E F G H I*/
-//#define GPIOE
-//#define GPIOF
-//#define GPIOG
-//#define GPIOH
-//#define GPIOI
-
-/* uart */
-//#define USE_UART1 1
-#define UART1_BAUD 115200
-
-//#define USE_I2C0
-//#define USE_I2C1
-//#define USE_I2C2
-//#define USE_I2C3
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* Onboard LEDs */
 #ifndef USE_LED_1
 #define USE_LED_1 1
@@ -100,6 +72,7 @@
 #define UART5_GPIO_RX GPIO_UART5_RX
 #define UART5_GPIO_PORT_TX GPIO_BANK_UART5_TX
 #define UART5_GPIO_TX GPIO_UART5_TX
+
 
 
 /*
