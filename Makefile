@@ -4,13 +4,17 @@
 BINARY = app_main
 ASM_SRC += $(shell find  ./src -name '*.s')
 C_SRC+= $(shell find  ./src -name '*.c')
+C_SRC+= $(shell find  ./ppz_stm32 -name '*.c')
 OBJS += $(ASM_SRC:%.s=%.o)
 OBJS += $(C_SRC:%.c=%.o)
 
-CFLAGS += -I ./mavlinkNew
+CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
+CFLAGS += -DBOARD_CONFIG=\<lisa_l_1.0.h\>
+CFLAGS += -DUSE_UART1=1
+CFLAGS += -std=c99
 
 LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
-BOARD_CONFIG = \"lisa_s_1.0.h\"
+
 
 
 
@@ -264,6 +268,7 @@ clean:
 	@#printf "  CLEAN\n"
 	$(Q)rm -f *.o *.d *.elf *.bin *.hex *.srec *.list *.map
 	$(Q)rm -f src/*.o src/*.d
+	aa=find  ./ppz_stm32 -name '*.o' && rm $(aa)
 
 stylecheck: $(STYLECHECKFILES:=.stylecheck)
 styleclean: $(STYLECHECKFILES:=.styleclean)

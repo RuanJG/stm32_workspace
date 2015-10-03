@@ -28,7 +28,7 @@
  */
 
 #include "mcu_periph/sys_time.h"
-#include "mcu.h"
+//#include "mcu.h"
 
 PRINT_CONFIG_VAR(SYS_TIME_FREQUENCY)
 

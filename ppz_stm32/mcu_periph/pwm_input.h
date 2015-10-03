@@ -27,10 +27,11 @@
 #ifndef PWM_INPUT_H
 #define PWM_INPUT_H
 
-#ifdef USE_PWM_INPUT
 
 #include "std.h"
 #include "mcu_periph/pwm_input_arch.h"
+
+#ifdef USE_PWM_INPUT
 
 #define PWM_PULSE_TYPE_ACTIVE_HIGH 0
 #define PWM_PULSE_TYPE_ACTIVE_LOW 1

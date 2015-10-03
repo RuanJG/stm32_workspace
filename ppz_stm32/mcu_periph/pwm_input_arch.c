@@ -28,7 +28,7 @@
 #include "mcu_periph/pwm_input_arch.h"
 
 #include BOARD_CONFIG
-#include "generated/airframe.h"
+//#include "generated/airframe.h"
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
@@ -48,6 +48,8 @@
 #define PWM_INPUT_IRQ_PRIO 2
 #endif
 
+
+#ifdef USE_PWM_INPUT
 static inline void pwm_input_set_timer(uint32_t tim)
 {
   timer_reset(tim);
@@ -234,4 +236,7 @@ void tim3_isr(void) {
   }
 }
 
+
 #endif
+
+#endif //USE_PWM_INPUT
