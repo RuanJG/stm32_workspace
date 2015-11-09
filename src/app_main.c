@@ -147,7 +147,7 @@ void ppz_pwm_setup()
 	actuators_pwm_arch_init();
 
 	for( id =0 ; id < ACTUATORS_PWM_NB ; id++ )
-		ActuatorPwmSet(id,1200);
+		ActuatorPwmSet(id,1001);
 	actuators_pwm_commit();
 }
 
@@ -208,8 +208,9 @@ void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(uarts);
 	
-		for( i = 0 ; i< data_len; i++)
-			uart_put_byte(uartd, buff[i] );
+		if( uartd != NULL)
+			for( i = 0 ; i< data_len; i++)
+				uart_put_byte(uartd, buff[i] );
 	
 		for( i = 0 ; i< data_len; i++){
 			if( mavlink_parse_char(TELEM_COM_ID, buff[i], &msg, &status) ) { 
@@ -252,7 +253,10 @@ void loop_telem_and_sbusppm_to_copter()
 	do_sbus_send_pwm(actuators_pwm_values,CHANNELS_MAX_COUNT);
 	;//mavlink_parse_char
 }
-
+void loop_telem_to_pwm()
+{
+	do_copy_uart_and_handle_mavlink_msg(TELEM_UART,NULL);
+}
 void setup()
 {
 	mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
@@ -266,8 +270,8 @@ void setup()
 void loop()
 {
 	//loop_4g_and_telem_to_copter();
-	loop_telem_and_sbusppm_to_copter();
-	
+	//loop_telem_and_sbusppm_to_copter();
+	loop_telem_to_pwm();
 	//delay_ms(10);
 	//do_echo(&uart1);
 	//do_echo(&uart2);
