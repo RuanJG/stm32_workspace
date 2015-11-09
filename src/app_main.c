@@ -19,7 +19,7 @@
 #define TELEM_COM_ID MAVLINK_COMM_0
 //#define SBUS_PPM_COM_ID MAVLINK_COMM_1
 
-#define DEBUG_APP 1
+#define DEBUG_APP 0
 #define log(format, ...) if( DEBUG_APP ) printf(format, ## __VA_ARGS__)
 
 #define CHANNELS_MAX_COUNT ACTUATORS_PWM_NB
@@ -147,7 +147,7 @@ void ppz_pwm_setup()
 	actuators_pwm_arch_init();
 
 	for( id =0 ; id < ACTUATORS_PWM_NB ; id++ )
-		ActuatorPwmSet(id,1200);
+		ActuatorPwmSet(id,1001);
 	actuators_pwm_commit();
 }
 
@@ -241,7 +241,7 @@ void do_sbus_send_pwm(int32_t * rcs, int count)
 void loop_4g_and_telem_to_copter()
 {
 	do_copy_uart_data_to_two_uart(COPTER_UART,REMOTE_4G_UART,TELEM_UART);
-	//do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
+	do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
 	do_copy_uart_data_to_other_uart(TELEM_UART,COPTER_UART);
 	//do_copy_uart_and_handle_mavlink_msg(TELEM_UART,COPTER_UART);
 }
@@ -255,7 +255,19 @@ void loop_telem_and_sbusppm_to_copter()
 
 void setup()
 {
-	mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
+	//mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
+  mcu_arch_init();
+  board_init();
+#if USE_UART1
+  uart1_init();
+#endif
+#if USE_UART2
+  uart2_init();
+#endif
+#if USE_UART3
+  uart3_init();
+#endif
+
 	//pwm_timer_setup();
 	ppz_pwm_setup();
 	//uart define config in makefile and uart_arch.c 
@@ -265,8 +277,8 @@ void setup()
 }
 void loop()
 {
-	//loop_4g_and_telem_to_copter();
-	loop_telem_and_sbusppm_to_copter();
+	loop_4g_and_telem_to_copter();
+	//loop_telem_and_sbusppm_to_copter();
 	
 	//delay_ms(10);
 	//do_echo(&uart1);
