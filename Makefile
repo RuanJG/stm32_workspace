@@ -7,7 +7,7 @@ C_SRC+= $(shell find  ./src -name '*.c')
 C_SRC+= $(shell find  ./ppz_stm32 -name '*.c')
 OBJS += $(ASM_SRC:%.s=%.o)
 OBJS += $(C_SRC:%.c=%.o)
-LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
+LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xc.ld
 CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
 CFLAGS += -std=c99
 
@@ -55,6 +55,14 @@ CFLAGS += -DGPIOE
 #CFLAGS += -DUSE_I2C3=1
 
 
+#//USE_AD1 mean use adc1 , USE_ADC_1 mean use the number 1 adc pin( for user view)
+#// after default USE_ADC_1 1, there are some describe for it: { the real channel, real gpio  }
+#//each adc has 4 channel (can be more), like here , AD1 will work out number 1-4 adc pin
+CFLAGS += -DUSE_AD1
+CFLAGS += -DUSE_ADC_1
+CFLAGS += -DUSE_ADC_2
+CFLAGS += -DUSE_ADC_3
+CFLAGS += -DUSE_ADC_4
 
 
 

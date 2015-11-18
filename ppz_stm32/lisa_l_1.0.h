@@ -159,6 +159,17 @@
 #define ADC_4_GPIO_PIN GPIO5
 #endif
 
+/*
+//user AD2 for ADC_5 pin
+#if USE_ADC_5
+#define AD2_1_CHANNEL 6
+#define ADC_5 AD2_1
+#define ADC_5_GPIO_PORT GPIOA
+#define ADC_5_GPIO_PIN GPIO6
+#endif
+
+*/
+
 /* allow to define ADC_CHANNEL_VSUPPLY in the airframe file*/
 #ifndef ADC_CHANNEL_VSUPPLY
 #define ADC_CHANNEL_VSUPPLY ADC_3

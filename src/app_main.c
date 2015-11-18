@@ -253,22 +253,78 @@ void loop_telem_and_sbusppm_to_copter()
 	;//mavlink_parse_char
 }
 
-void setup()
+
+#define NB_ADC 8
+#define ADC_NB_SAMPLES 16
+static struct adc_buf buf_adc[NB_ADC];
+
+inline void setup()
 {
-	mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
-	//pwm_timer_setup();
-	ppz_pwm_setup();
-	//uart define config in makefile and uart_arch.c 
-  	//uart_periph_set_mode(&uart1, USE_UART1_TX, USE_UART1_RX, UART1_HW_FLOW_CONTROL);
-  	//uart_periph_set_bits_stop_parity(&uart1, UART1_BITS, UART1_STOP, UART1_PARITY);
-  	//uart_periph_set_baudrate(&uart1, UART1_BAUD);
+	//mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
+	mcu_arch_init();
+	sys_time_init();
+#if USE_UART0
+ 	uart0_init();
+#endif
+#if USE_UART1
+	uart1_init();
+#endif
+#if USE_UART2
+	uart2_init();
+#endif
+#if USE_UART3
+	uart3_init();
+#endif
+	adc_init();
+
+#ifdef ADC_0
+  adc_buf_channel(ADC_0, &buf_adc[0], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_1
+  adc_buf_channel(ADC_1, &buf_adc[1], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_2
+  adc_buf_channel(ADC_2, &buf_adc[2], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_3
+  adc_buf_channel(ADC_3, &buf_adc[3], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_4
+  adc_buf_channel(ADC_4, &buf_adc[4], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_5
+  adc_buf_channel(ADC_5, &buf_adc[5], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_6
+  adc_buf_channel(ADC_6, &buf_adc[6], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_7
+  adc_buf_channel(ADC_7, &buf_adc[7], ADC_NB_SAMPLES);
+#endif
+mcu_int_enable();
+
+
+	//ppz_pwm_setup();
 }
-void loop()
+
+inline void update_adc_value()
+{
+  uint16_t values[NB_ADC];
+  uint8_t i;
+  for (i = 0; i < NB_ADC; i++) {
+    values[i] = buf_adc[i].sum / ADC_NB_SAMPLES;
+    log("adc%d=%d,",i,values[i]);
+  }
+  log("\n\r");
+}
+inline void loop()
 {
 	//loop_4g_and_telem_to_copter();
-	loop_telem_and_sbusppm_to_copter();
+	//loop_telem_and_sbusppm_to_copter();
 	
-	//delay_ms(10);
+	delay_ms(1000);
+	log("1s\n\r");
+	update_adc_value();
 	//do_echo(&uart1);
 	//do_echo(&uart2);
 	//do_echo(&uart3);
