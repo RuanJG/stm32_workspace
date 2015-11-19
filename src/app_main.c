@@ -254,9 +254,177 @@ void loop_telem_and_sbusppm_to_copter()
 }
 
 
-#define NB_ADC 8
+#define NB_ADC 6
 #define ADC_NB_SAMPLES 16
 static struct adc_buf buf_adc[NB_ADC];
+
+#define MAX_RC_COUNT 6
+#define ZFRAME_RCS_INT_COUNT 2;// MAX_RC_COUNT/3; as each int store 3 rc, (MAX_RC_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
+#define ZFRAME_BUFF_SIZE 13; //tag(2) + rcs(4*ZFRAME_RCS_INT_COUNT) + crc(2) + len(1) = 12 
+typedef struct _zframe_packet{
+	uint16_t tag;
+	uint8_t count;
+	uint32_t rcs[ZFRAME_RCS_INT_COUNT];//MAX_RC_COUNT/3 , rcs[0]=rc1-0-rc2-0-rc3 ....
+	uint16_t crc;
+}zframe_packet_t;
+
+//static uint16_t rcs[MAX_RC_COUNT];
+inline uint16_t _get_rc(int id)
+{
+	return buf_adc[i].sum / ADC_NB_SAMPLES;
+}
+#define MAX_RC_VALUE 2024
+#define MIN_RC_VALUE 1000
+#define scale_rc_0_to_2048(rc) (rc>>1)
+#define scale_rc_0_to_1024(rc) (rc>>2)
+
+#define get_rc_for_mavlink(id) ( MIN_RC_VALUE + scale_rc_0_to_1024(_get_rc(id)))
+inline uint16_t get_rc_for_reciver(id) {
+	uint16_t rc = scale_rc_0_to_1024(_get_rc(id)) ;
+	if( rc >= 0x3ff ) rc = 0x3fe; //so the max data is 0x3fe,and the tag is 0x3ff
+	return rc;
+}
+void encode_rcs(zframe_packet_t *packet)
+{
+	int id,index;
+	int count;
+
+	packet->tag = 0x3ff;
+	packet->count = MAX_RC_COUNT;
+	memset(packet->rcs,0, sizeof(uint32_t)*ZFRAME_RCS_INT_COUNT);
+
+	for( id=0,index=0,count=0; id < MAX_RC_COUNT; id++,count+=11){
+		if( count > 22 ){//count = 0 11 22
+			count = 0; 
+			index++;
+		}
+		packet->rcs[index] |= ( get_rc_for_reciver(id) << count );//10bit
+	}
+
+	packet->crc = crc_calculate( (uint8_t*)packet, ZFRAME_BUFF_SIZE-2);
+}
+
+int check_zframe_packet(zframe_packet_t *packet)
+{
+	uint16_t crc;
+	if( packet->tag != 0x3ff ){
+		log("packet.tag error =%02x\n\r",packet->tag);
+		return -1;
+	}
+	if( packet->count != MAX_RC_COUNT ){
+		log("packet.count error =%d\n\r",packet->count);
+		return -1;
+	}
+	crc = crc_calculate( (uint8_t*)packet, ZFRAME_BUFF_SIZE-2);
+	if( crc != packet->crc ){
+		log("packet.crc error =%02x, check=%02x \n\r",packet->crc, crc);
+		return -1;
+	}
+	return 0;
+
+}
+
+
+int decode_zframe(zframe_packet_t *packet, uint16_t *rd)
+{
+	int res,i,bit_cnt,rc_index;
+
+	res = check_zframe_packet(packet);
+
+	if( res < 0 ){
+		log("packet error\n\r");
+		return -1;
+	}
+	bit_cnt = 0;
+	rc_index = 0;
+	for( i=0; i< MAX_RC_COUNT && rc_index <ZFRAME_RCS_INT_COUNT ; i++){
+		rd[i]= (packet->rcs[rc_index]>>bit_cnt) & 0x3ff;	
+		bit_cnt+=11;
+		if( bit_cnt > 22 ){
+			bit_cnt = 0
+			rc_index++;
+		}
+	}
+	if( i < MAX_RC_COUNT ){
+		log("decode_zframe rc count is not right\n\r");
+		return -1;
+	}
+	return 0;
+}
+uint16_t rc_data[MAX_RC_COUNT];
+void handle_zframe_packet(zframe_packet_t *packet)
+{
+	int error,i;
+	error = decode_zframe(packet,rc_data);
+	if( error == 0 ){
+		for(i=0 ; i< MAX_RC_COUNT; i++) 
+			log("RC%d=%d,",i,rc_data[i]);
+	}
+	log("...\n\r");
+
+}
+uint8_t recive_buff[ZFRAME_BUFF_SIZE];
+int index0 = 0;
+void collect_zframe(uint8_t *data, int len)
+{
+	int i, index0;
+	int packet_start = 0;
+	zframe_packet_t packet; 
+	zframe_packet_t *point;
+
+	for( i = 0; i< len; i++){
+		if( index0 >= ZFRAME_BUFF_SIZE){
+			point = (zframe_packet_t *)recive_buff;
+			handle_zframe_packet(point);
+			index0 = 0;
+		}
+		if( index0 == 0 ){
+			if( data[i] == 0xff && data[i+1] == 0x03 ){
+				recive_buff[index0++]=data[i++];
+				recive_buff[index0++]=data[i];
+			}else{
+				log("ignoring data");
+			}
+		}else{
+			recive_buff[index0]=data[i];
+		}
+	}
+}
+void send_data_to_emitter(uint8_t* data, int len)
+{
+	
+}
+
+void send_rc_to_reciver()
+{
+	zframe_packet_t packet;
+
+	encode_rcs(&packet);
+
+	send_data_to_emitter((uint8_t*)&packet,ZFRAME_BUFF_SIZE); 
+}
+void send_rc_to_reciver_old()
+{
+	int id,index;
+	int count;
+	uint8_t data[ZFRAME_BUFF_SIZE]={0};// 0-1024 each rc need 10 bit, int can be use for 3 rc  
+	uint32_t len;
+	uint32_t *p32;
+
+	//memset(data,0,len);
+	data[0]=0xff; data[1]=0x03; // tag 0x3ff;
+	p32 = (uint32_t*) &data[2];
+	for( id=0,index=0,count=0; id < MAX_RC_COUNT; id++,count+=10){
+		if( count > 20 ){//count = 0 10 20
+			count = 0; 
+			index++;
+		}
+		p32[index] |= ( get_rc_for_reciver(id) << count );//10bit
+	}
+
+	send_data_to_emitter(data,ZFRAME_BUFF_SIZE); 
+}
+
 
 inline void setup()
 {
@@ -275,32 +443,27 @@ inline void setup()
 #if USE_UART3
 	uart3_init();
 #endif
-	adc_init();
 
-#ifdef ADC_0
-  adc_buf_channel(ADC_0, &buf_adc[0], ADC_NB_SAMPLES);
-#endif
+	adc_init();
 #ifdef ADC_1
-  adc_buf_channel(ADC_1, &buf_adc[1], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_1, &buf_adc[0], ADC_NB_SAMPLES);
 #endif
 #ifdef ADC_2
-  adc_buf_channel(ADC_2, &buf_adc[2], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_2, &buf_adc[1], ADC_NB_SAMPLES);
 #endif
 #ifdef ADC_3
-  adc_buf_channel(ADC_3, &buf_adc[3], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_3, &buf_adc[2], ADC_NB_SAMPLES);
 #endif
 #ifdef ADC_4
-  adc_buf_channel(ADC_4, &buf_adc[4], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_4, &buf_adc[3], ADC_NB_SAMPLES);
 #endif
 #ifdef ADC_5
-  adc_buf_channel(ADC_5, &buf_adc[5], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_5, &buf_adc[4], ADC_NB_SAMPLES);
 #endif
 #ifdef ADC_6
-  adc_buf_channel(ADC_6, &buf_adc[6], ADC_NB_SAMPLES);
+  adc_buf_channel(ADC_6, &buf_adc[5], ADC_NB_SAMPLES);
 #endif
-#ifdef ADC_7
-  adc_buf_channel(ADC_7, &buf_adc[7], ADC_NB_SAMPLES);
-#endif
+
 mcu_int_enable();
 
 

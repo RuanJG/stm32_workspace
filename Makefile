@@ -18,7 +18,6 @@ CFLAGS += -DPERIPHERALS_AUTO_INIT
 CFLAGS += -DUART_RX_BUFFER_SIZE=1024
 CFLAGS += -DUART_TX_BUFFER_SIZE=1024
 CFLAGS += -DUSE_UART1=1
-CFLAGS += -DUSE_UART2=1
 CFLAGS += -DUSE_UART3=1
 #CFLAGS += -DUSE_UART5=1
 CFLAGS += -DUART1_BAUD=57600
@@ -59,14 +58,19 @@ CFLAGS += -DGPIOE
 #// after default USE_ADC_1 1, there are some describe for it: { the real channel, real gpio  }
 #//each adc has 4 channel (can be more), like here , AD1 will work out number 1-4 adc pin
 CFLAGS += -DUSE_AD1
+CFLAGS += -DUSE_AD2
 CFLAGS += -DUSE_ADC_1
 CFLAGS += -DUSE_ADC_2
 CFLAGS += -DUSE_ADC_3
 CFLAGS += -DUSE_ADC_4
+CFLAGS += -DUSE_ADC_5
+CFLAGS += -DUSE_ADC_6
 
-
-
-
+#//choose the emiter, uart or spi
+CFLAGS += -DUSE_UART2=1
+#CFLAGS += -DUSE_SPI1=1
+#CFLAGS += -DSPI_MASTER
+#CFLAGS += -DUSE_SPI_SLAVE0=1
 
 
 

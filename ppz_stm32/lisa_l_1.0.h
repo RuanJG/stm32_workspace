@@ -61,11 +61,11 @@
 #define UART2_GPIO_PORT_TX GPIO_BANK_USART2_TX
 #define UART2_GPIO_TX GPIO_USART2_TX
 
-#define UART3_GPIO_AF AFIO_MAPR_USART3_REMAP_PARTIAL_REMAP
-#define UART3_GPIO_PORT_RX GPIO_BANK_USART3_PR_RX
-#define UART3_GPIO_RX GPIO_USART3_PR_RX
-#define UART3_GPIO_PORT_TX GPIO_BANK_USART3_PR_TX
-#define UART3_GPIO_TX GPIO_USART3_PR_TX
+#define UART3_GPIO_AF 0//AFIO_MAPR_USART3_REMAP_PARTIAL_REMAP
+#define UART3_GPIO_PORT_RX GPIO_BANK_USART3_RX
+#define UART3_GPIO_RX GPIO_USART3_RX
+#define UART3_GPIO_PORT_TX GPIO_BANK_USART3_TX
+#define UART3_GPIO_TX GPIO_USART3_TX
 
 #define UART5_GPIO_AF 0
 #define UART5_GPIO_PORT_RX GPIO_BANK_UART5_RX
@@ -128,23 +128,56 @@
 #define USE_AD_TIM1 1
 
 #if USE_ADC_1
-#define AD1_1_CHANNEL 8
+#define AD1_1_CHANNEL 10
 #define ADC_1 AD1_1
-#define ADC_1_GPIO_PORT GPIOB
+#define ADC_1_GPIO_PORT GPIOC
 #define ADC_1_GPIO_PIN GPIO0
 #endif
 
 #if USE_ADC_2
-#define AD1_2_CHANNEL 9
+#define AD1_2_CHANNEL 11
 #define ADC_2 AD1_2
-#define ADC_2_GPIO_PORT GPIOB
+#define ADC_2_GPIO_PORT GPIOC
 #define ADC_2_GPIO_PIN GPIO1
 #endif
 
 // Internal ADC for battery enabled by default
+#if USE_ADC_3
+#define AD1_3_CHANNEL 12
+#define ADC_3 AD1_3
+#define ADC_3_GPIO_PORT GPIOC
+#define ADC_3_GPIO_PIN GPIO2
+#endif
+
+#if USE_ADC_4
+#define AD1_4_CHANNEL 13
+#define ADC_4 AD1_4
+#define ADC_4_GPIO_PORT GPIOC
+#define ADC_4_GPIO_PIN GPIO3
+#endif
+
+//user AD2 for ADC_5 pin
+#if USE_ADC_5
+#define AD2_1_CHANNEL 14
+#define ADC_5 AD2_1
+#define ADC_5_GPIO_PORT GPIOC
+#define ADC_5_GPIO_PIN GPIO4
+#endif
+
+#if USE_ADC_6
+#define AD2_2_CHANNEL 15
+#define ADC_6 AD2_2
+#define ADC_6_GPIO_PORT GPIOC
+#define ADC_6_GPIO_PIN GPIO5
+#endif
+
+
+/*
+// Internal ADC for battery enabled by default
 #ifndef USE_ADC_3
 #define USE_ADC_3 1
 #endif
+
 #if USE_ADC_3
 #define AD1_3_CHANNEL 0
 #define ADC_3 AD1_3
@@ -152,28 +185,11 @@
 #define ADC_3_GPIO_PIN GPIO0
 #endif
 
-#if USE_ADC_4
-#define AD1_4_CHANNEL 15
-#define ADC_4 AD1_4
-#define ADC_4_GPIO_PORT GPIOC
-#define ADC_4_GPIO_PIN GPIO5
-#endif
-
-/*
-//user AD2 for ADC_5 pin
-#if USE_ADC_5
-#define AD2_1_CHANNEL 6
-#define ADC_5 AD2_1
-#define ADC_5_GPIO_PORT GPIOA
-#define ADC_5_GPIO_PIN GPIO6
-#endif
-
-*/
-
-/* allow to define ADC_CHANNEL_VSUPPLY in the airframe file*/
+// allow to define ADC_CHANNEL_VSUPPLY in the airframe file
 #ifndef ADC_CHANNEL_VSUPPLY
 #define ADC_CHANNEL_VSUPPLY ADC_3
 #endif
+*/
 
 #define DefaultVoltageOfAdc(adc) (0.0059*adc)
 
