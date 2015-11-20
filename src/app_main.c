@@ -148,7 +148,7 @@ void ppz_pwm_setup()
 	actuators_pwm_arch_init();
 
 	for( id =0 ; id < ACTUATORS_PWM_NB ; id++ )
-		ActuatorPwmSet(id,1200);
+		ActuatorPwmSet(id,1001);
 	actuators_pwm_commit();
 }
 
@@ -259,6 +259,33 @@ void loop_telem_and_sbusppm_to_copter()
 #define ADC_NB_SAMPLES 16
 static struct adc_buf buf_adc[NB_ADC];
 
+//static uint16_t rcs[MAX_RC_COUNT];
+inline uint16_t _get_rc(int id)
+{
+	return buf_adc[id].sum / ADC_NB_SAMPLES;
+}
+#define MAX_RC_VALUE 2024
+#define MIN_RC_VALUE 1000
+#define scale_rc_0_to_2048(rc) (rc>>1)
+#define scale_rc_0_to_1024(rc) (rc>>2)
+#define get_rc_for_mavlink(id) ( MIN_RC_VALUE + scale_rc_0_to_1024(_get_rc(id)))
+
+
+inline uint16_t user_scale_rc(int id, uint16_t rc)
+{
+	return rc;
+}
+inline uint16_t get_rc_for_reciver(id) {
+	uint16_t rc = scale_rc_0_to_1024(_get_rc(id)) ;
+	if( rc >= 0x3ff ) 
+		rc = 0x3fe; //so the max data is 0x3fe,and the tag is 0x3ff
+
+	return user_scale_rc(id,rc);
+}
+
+
+
+
 #define MAX_RC_COUNT 6
 #define ZFRAME_RCS_INT_COUNT 2 // MAX_RC_COUNT/3; as each int store 3 rc, (MAX_RC_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
 #define ZFRAME_BUFF_SIZE 13 //tag(2) + rcs(4*ZFRAME_RCS_INT_COUNT) + crc(2) + len(1) = 12 
@@ -271,27 +298,13 @@ static struct adc_buf buf_adc[NB_ADC];
 typedef struct _zframe_packet{
 	uint16_t tag;
 	uint8_t count;
-	uint32_t rcs[ZFRAME_RCS_INT_COUNT];//MAX_RC_COUNT/3 , rcs[0]=rc1-0-rc2-0-rc3 ....
+	uint32_t rcs[ZFRAME_RCS_INT_COUNT];//MAX_RC_COUNT/3 , rcs[0]=rc1-0-rc2-0-rc3 .... ; if reciver to sender  count =zframe_decode_false_count rc1= zframe_send_packet_count rc2 = zframe_recive_success_count
 	uint16_t crc; //must put in the end
 }zframe_packet_t;
 
-//static uint16_t rcs[MAX_RC_COUNT];
-inline uint16_t _get_rc(int id)
-{
-	return buf_adc[id].sum / ADC_NB_SAMPLES;
-}
-#define MAX_RC_VALUE 2024
-#define MIN_RC_VALUE 1000
-#define scale_rc_0_to_2048(rc) (rc>>1)
-#define scale_rc_0_to_1024(rc) (rc>>2)
-
-#define get_rc_for_mavlink(id) ( MIN_RC_VALUE + scale_rc_0_to_1024(_get_rc(id)))
-inline uint16_t get_rc_for_reciver(id) {
-	uint16_t rc = scale_rc_0_to_1024(_get_rc(id)) ;
-	if( rc >= 0x3ff ) rc = 0x3fe; //so the max data is 0x3fe,and the tag is 0x3ff
-	return rc;
-}
-
+#define ZFRAME_UART_BUFF_SIZE 1024
+#define ZFRAME_SENDER
+//#define ZFRAME_RECIVER
 void do_dead(char *last_string)
 {
 	log("system Dead: %s\n\r",last_string);
@@ -309,10 +322,12 @@ int check_zframe_packet(uint8_t* packet)
 		log("packet.tag error =%02x\n\r",tag);
 		return -1;
 	}
+	/*
 	if( zframe_get_count(packet) != MAX_RC_COUNT ){
 		log("packet.count error =%d\n\r",zframe_get_count(packet));
 		return -1;
 	}
+	*/
 	crc_ori = zframe_get_crc(packet);
 	crc = crc_calculate( packet, ZFRAME_BUFF_SIZE-2);
 	if( crc != crc_ori ){
@@ -350,63 +365,9 @@ int decode_zframe(uint8_t* packet, uint16_t *rd)
 	}
 	return 0;
 }
-
-
-void handle_zframe_packet(uint8_t * data)
-{
-	int error,i;
-	uint16_t rc_data[MAX_RC_COUNT];
-
-	error = decode_zframe(data,rc_data);
-
-	log("get rc:\n\r");
-	if( error == 0 ){
-		for(i=0 ; i< MAX_RC_COUNT; i++) 
-			log("RC%d=%d,",i,rc_data[i]);
-	}else{
-		do_dead("decode_zframe error");
-	}
-	log("...\n\r");
-}
-void collect_zframe(uint8_t *data, int len)
-{
-	static uint8_t recive_buff[ZFRAME_BUFF_SIZE]={0};
-	static int index0 = 0;
-
-	int i;
-	int packet_start = 0;
-
-	//log("collect_zframe: start \n\r");
-	for( i = 0; i< len; i++){
-		if( index0 >= ZFRAME_BUFF_SIZE){
-/*
-	for( int j=0 ; j< len; j++) log("%02x,",recive_buff[j]);
-	log("\n\r");
-	*/
-			handle_zframe_packet(recive_buff);
-			index0 = 0;
-		}
-		if( index0 == 0 ){
-			if( is_zframe_tag(data[0],data[1]) ){
-				recive_buff[index0++]=data[i++];
-				recive_buff[index0++]=data[i];
-			}else{
-				log("ignoring data");
-			}
-		}else{
-			recive_buff[index0++]=data[i];
-		}
-	}
-	//log("collect_zframe: end\n\r");
-}
-
-
-
-
 void encode_rcs(uint8_t *buff)
 {
-	int id,index;
-	int count;
+	int id,index,count;
 	uint32_t *p32;
 	uint16_t crc;
 
@@ -429,25 +390,243 @@ void encode_rcs(uint8_t *buff)
 	buff[ZFRAME_BUFF_SIZE-2]=crc&0xff;
 	buff[ZFRAME_BUFF_SIZE-1]=(crc>>8)&0xff;
 }
-
-void send_data_to_emitter(uint8_t* data, int len)
+void encode_status(uint8_t *buff,unsigned long recive_error_cnt, unsigned long recive_cnt, unsigned long send_cnt)
 {
-	/*log("send_data_to_emitter:\n\r");
-	for( int i=0 ; i< len; i++) log("%02x,",data[i]);
-	log("\n\r");
-	*/
-	collect_zframe(data,len);
+	int index;
+	uint32_t *p32;
+	uint16_t crc;
+
+	//tag
+	buff[0] = 0xff;buff[1] = 0x03;
+	//count
+	if( recive_error_cnt > 0xff ) 
+		buff[2]=0xff;
+	else
+		buff[2] = recive_error_cnt ;
+	//rc
+	p32 = (uint32_t *)&buff[3];
+	if( ZFRAME_RCS_INT_COUNT >= 2 ){
+		p32[0] =send_cnt;
+		p32[1]=recive_cnt;
+	}
+	//crc
+	crc = crc_calculate( buff, ZFRAME_BUFF_SIZE-2);
+	buff[ZFRAME_BUFF_SIZE-2]=crc&0xff;
+	buff[ZFRAME_BUFF_SIZE-1]=(crc>>8)&0xff;
+}
+void collect_zframe(uint8_t *data, int len, void (*cb)(uint8_t * data))
+{
+	static uint8_t recive_buff[ZFRAME_BUFF_SIZE]={0};
+	static int index0 = 0;
+
+	int i;
+	int packet_start = 0;
+
+	//log("collect_zframe: start \n\r");
+	for( i = 0; i< len; i++){
+		if( index0 >= ZFRAME_BUFF_SIZE){
+			cb(recive_buff);
+			index0 = 0;
+		}
+		if( index0 == 0 ){
+			if( is_zframe_tag(data[0],data[1]) ){
+				recive_buff[index0++]=data[i++];
+				recive_buff[index0++]=data[i];
+			}else{
+				log("ignoring data");
+			}
+		}else{
+			recive_buff[index0++]=data[i];
+		}
+	}
+	//log("collect_zframe: end\n\r");
+}
+inline void send_data_by_uart(struct uart_periph *uartz, uint8_t*data, int len)
+{
+	int i;
+	for( i = 0 ; i< len; i++)
+		uart_put_byte(uartz, data[i] );	
 }
 
-void send_rc_to_reciver()
+#ifdef ZFRAME_RECIVER
+
+//################################################3 zframe reciver
+#define zframeReciverUart &uart3
+unsigned long zframe_recive_success_count=0;
+//unsigned long zframe_recive_packet_count=0; //packget_count = success+false
+unsigned long zframe_recive_decode_false_count=0;
+unsigned long zframe_send_packet_count = 0;
+int status_tid=0;
+
+void handle_zframe_packet_from_sender(uint8_t * data)
 {
-	uint8_t buff[ZFRAME_BUFF_SIZE];
+	int error,i;
+	uint16_t rc_data[MAX_RC_COUNT];
+
+
+	error = decode_zframe(data,rc_data);
+
+	log("get rc:\n\r");
+	if( error == 0 ){
+		zframe_recive_success_count ++;
+		for(i=0 ; i< MAX_RC_COUNT; i++) 
+			log("RC%d=%d,",i,rc_data[i]);
+
+		//do_rc_to_pwm(rc_data,MAX_RC_COUNT);
+	}else{
+		zframe_recive_decode_false_count++;
+	}
+	log("...\n\r");
+	//log("...\n\r,get packet=%d,false=%d",zframe_recive_success_count,zframe_decode_false_count);
+}
+void listen_sender_by_uart(struct uart_periph *uarts)
+{
+	int data_len,i;
+	uint8_t buff[ZFRAME_UART_BUFF_SIZE];
+
+	data_len = uart_char_available(uarts);
+	if( data_len > 0 ){
+		for( i = 0 ; i< data_len; i++)
+			buff[i] = uart_getch(uarts);	
+		collect_zframe(buff,data_len,handle_zframe_packet_from_sender);
+	}
+}
+void send_status_to_sender_by_uart()
+{
+	static uint8_t buff[ZFRAME_BUFF_SIZE];
+	encode_status(buff, zframe_recive_decode_false_count , zframe_recive_success_count, zframe_send_packet_count);
+	send_data_by_uart(zframeReciverUart,buff,ZFRAME_BUFF_SIZE);
+	zframe_send_packet_count++;
+}
+void zframe_reciver_setup()
+{
+	ppz_pwm_setup();
+	status_tid =sys_time_register_timer(1.0/4,NULL);		
+}
+
+void zframe_reciver_loop()
+{
+	listen_sender_by_uart(zframeReciverUart);
+
+	if( sys_time_check_and_ack_timer(status_tid) )
+		send_status_to_sender_by_uart();
+log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_recive_success_count,zframe_recive_decode_false_count );
+delay_ms(10);
+}
+//################################################3 zframe reciver
+
+#endif //ZFRAME_RECIVER
+
+
+
+
+#ifdef ZFRAME_SENDER
+
+//################################################ zframe sender
+#define zframeSenderUart &uart3
+unsigned long zframe_reciver_success_count=0; //the reciver's success count
+unsigned long zframe_reciver_decode_false_count=0;//the reciver's false count
+unsigned long zframe_reciver_send_count=0; // the reciver's send count
+
+unsigned long zframe_send_packet_count = 0;//sender send count
+unsigned long zframe_sender_recive_packet_success_count = 0;//sender reciver ok  count
+unsigned long zframe_sender_recive_packet_false_count = 0;//sender reciver false count
+int status_tid=0;
+int sendrc_tid=0;
+
+void send_rc_to_reciver_by_uart()
+{
+	static uint8_t buff[ZFRAME_BUFF_SIZE]={0};
 
 	encode_rcs(buff);
-	send_data_to_emitter(buff,ZFRAME_BUFF_SIZE); 
+	zframe_send_packet_count++;
+	send_data_by_uart(zframeSenderUart, buff, ZFRAME_BUFF_SIZE);
+}
+void display_status()
+{
+	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count );
+	log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
 }
 
+void handle_zframe_packet_frome_reciver(uint8_t *data)
+{
+	int error,i;
+	uint16_t rc_data[MAX_RC_COUNT];
+	uint32_t *p;
 
+	error = check_zframe_packet(data);
+	if( error == 0 ){
+		zframe_sender_recive_packet_success_count++;
+
+		p = zframe_get_rcs_point(data);
+		zframe_reciver_success_count = p[1];  
+		zframe_reciver_send_count = p[0];  
+		zframe_reciver_decode_false_count = zframe_get_count(data); 
+
+	}else{
+		zframe_sender_recive_packet_false_count++;
+	}
+}
+void listen_reciver_by_uart(struct uart_periph *uarts)
+{
+	int data_len,i;
+	uint8_t buff[ZFRAME_UART_BUFF_SIZE];
+
+	data_len = uart_char_available(uarts);
+	if( data_len > 0 ){
+		for( i = 0 ; i< data_len; i++)
+			buff[i] = uart_getch(uarts);	
+		collect_zframe(buff,data_len,handle_zframe_packet_frome_reciver);
+	}
+}
+
+void zframe_sender_setup()
+{
+	adc_init();
+#ifdef ADC_1
+	adc_buf_channel(ADC_1, &buf_adc[0], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_2
+ 	adc_buf_channel(ADC_2, &buf_adc[1], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_3
+	adc_buf_channel(ADC_3, &buf_adc[2], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_4
+	adc_buf_channel(ADC_4, &buf_adc[3], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_5
+	adc_buf_channel(ADC_5, &buf_adc[4], ADC_NB_SAMPLES);
+#endif
+#ifdef ADC_6
+	adc_buf_channel(ADC_6, &buf_adc[5], ADC_NB_SAMPLES);
+#endif
+
+	sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
+	status_tid =sys_time_register_timer(1.0,NULL);		
+
+	mcu_int_enable();
+}
+
+void zframe_sender_loop()
+{
+	if( sys_time_check_and_ack_timer(sendrc_tid) )
+		send_rc_to_reciver_by_uart();
+
+	listen_reciver_by_uart(zframeSenderUart);
+
+	if( sys_time_check_and_ack_timer(status_tid) )
+		display_status();
+}
+//################################################ zframe sender
+
+#endif// ZFRAME_SENDER
+
+
+
+
+
+//#################################################### main 
 
 inline void setup()
 {
@@ -467,54 +646,22 @@ inline void setup()
 	uart3_init();
 #endif
 
-	adc_init();
-#ifdef ADC_1
-  adc_buf_channel(ADC_1, &buf_adc[0], ADC_NB_SAMPLES);
+#ifdef ZFRAME_SENDER
+	zframe_sender_setup();
 #endif
-#ifdef ADC_2
-  adc_buf_channel(ADC_2, &buf_adc[1], ADC_NB_SAMPLES);
+#ifdef ZFRAME_RECIVER
+	zframe_reciver_setup();
 #endif
-#ifdef ADC_3
-  adc_buf_channel(ADC_3, &buf_adc[2], ADC_NB_SAMPLES);
-#endif
-#ifdef ADC_4
-  adc_buf_channel(ADC_4, &buf_adc[3], ADC_NB_SAMPLES);
-#endif
-#ifdef ADC_5
-  adc_buf_channel(ADC_5, &buf_adc[4], ADC_NB_SAMPLES);
-#endif
-#ifdef ADC_6
-  adc_buf_channel(ADC_6, &buf_adc[5], ADC_NB_SAMPLES);
-#endif
-
-mcu_int_enable();
-
-
-	//ppz_pwm_setup();
 }
 
-inline void update_adc_value()
-{
-  uint16_t values[NB_ADC];
-  uint8_t i;
-  for (i = 0; i < NB_ADC; i++) {
-    values[i] = buf_adc[i].sum / ADC_NB_SAMPLES;
-    log("adc%d=%d,",i,values[i]);
-  }
-  log("\n\r");
-}
 inline void loop()
 {
-	//loop_4g_and_telem_to_copter();
-	//loop_telem_and_sbusppm_to_copter();
-	
-	delay_ms(100);
-	log("1s\n\r");
-	//update_adc_value();
-	send_rc_to_reciver();
-	//do_echo(&uart1);
-	//do_echo(&uart2);
-	//do_echo(&uart3);
+#ifdef ZFRAME_SENDER
+	zframe_sender_loop();
+#endif
+#ifdef ZFRAME_RECIVER
+	zframe_reciver_loop();
+#endif
 }
 
 int main(void)
