@@ -259,13 +259,12 @@ void loop_telem_and_sbusppm_to_copter()
 #define ADC_NB_SAMPLES 16
 static struct adc_buf buf_adc[NB_ADC];
 
-//static uint16_t rcs[MAX_RC_COUNT];
-inline uint16_t _get_rc(int id)
-{
-	return buf_adc[id].sum / ADC_NB_SAMPLES;
-}
 #define MAX_RC_VALUE 2024
 #define MIN_RC_VALUE 1000
+inline uint16_t _get_rc(int id)
+{
+	return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : MIN_RC_VALUE ;
+}
 #define scale_rc_0_to_2048(rc) (rc>>1)
 #define scale_rc_0_to_1024(rc) (rc>>2)
 #define get_rc_for_mavlink(id) ( MIN_RC_VALUE + scale_rc_0_to_1024(_get_rc(id)))
@@ -524,6 +523,7 @@ delay_ms(10);
 
 //################################################ zframe sender
 #define zframeSenderUart &uart3
+#define userUart &uart1
 unsigned long zframe_reciver_success_count=0; //the reciver's success count
 unsigned long zframe_reciver_decode_false_count=0;//the reciver's false count
 unsigned long zframe_reciver_send_count=0; // the reciver's send count
@@ -533,6 +533,7 @@ unsigned long zframe_sender_recive_packet_success_count = 0;//sender reciver ok 
 unsigned long zframe_sender_recive_packet_false_count = 0;//sender reciver false count
 int status_tid=0;
 int sendrc_tid=0;
+int view_rc_tid = 0;
 
 void send_rc_to_reciver_by_uart()
 {
@@ -547,7 +548,25 @@ void display_status()
 	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count );
 	log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
 }
+void send_rc_to_user()
+{
+	int id=0;
+	mavlink_message_t msg;
+	mavlink_rc_channels_override_t packet;
 
+	packet.target_system=1;
+	packet.target_component=1;
+	packet.chan1_raw= get_rc_for_mavlink(id++);
+	packet.chan2_raw= get_rc_for_mavlink(id++);
+	packet.chan3_raw= get_rc_for_mavlink(id++);
+	packet.chan4_raw= get_rc_for_mavlink(id++);
+	packet.chan5_raw= get_rc_for_mavlink(id++);
+	packet.chan5_raw= get_rc_for_mavlink(id++);
+	packet.chan7_raw= get_rc_for_mavlink(id++);
+	packet.chan8_raw= get_rc_for_mavlink(id++);
+
+	mavlink_msg_rc_channels_override_encode(255, 109,  &msg, &packet);
+}
 void handle_zframe_packet_frome_reciver(uint8_t *data)
 {
 	int error,i;
@@ -602,21 +621,25 @@ void zframe_sender_setup()
 	adc_buf_channel(ADC_6, &buf_adc[5], ADC_NB_SAMPLES);
 #endif
 
-	sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
+	sendrc_tid = sys_time_register_timer(1.0/1000,send_rc_to_reciver_by_uart);	
 	status_tid =sys_time_register_timer(1.0,NULL);		
+	view_rc_tid =sys_time_register_timer(1.0/200,NULL);		
 
 	mcu_int_enable();
 }
 
 void zframe_sender_loop()
 {
+	/* run in timer inttrupter 
 	if( sys_time_check_and_ack_timer(sendrc_tid) )
 		send_rc_to_reciver_by_uart();
-
+	*/
 	listen_reciver_by_uart(zframeSenderUart);
 
 	if( sys_time_check_and_ack_timer(status_tid) )
 		display_status();
+	if( sys_time_check_and_ack_timer(view_rc_tid) )
+		send_rc_to_user();
 }
 //################################################ zframe sender
 
