@@ -259,34 +259,81 @@ void loop_telem_and_sbusppm_to_copter()
 #define ADC_NB_SAMPLES 16
 static struct adc_buf buf_adc[NB_ADC];
 
-#define MAX_RC_VALUE 2024
-#define MIN_RC_VALUE 1000
-inline uint16_t _get_rc(int id)
-{
-	return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : MIN_RC_VALUE ;
+#define ADC_MIN_ID 0
+#define ADC_TRIM_ID 1
+#define ADC_MAX_ID 2
+#define ADC_RANGE_ID 3
+uint16_t adc_sensor_range[NB_ADC][4]={
+	{1020,2281,3460, 2440},
+	{710, 1967, 3200, 2390},
+	{800, 1949, 3150, 2350},
+	{640, 1829, 3150, 2530},
+	{0,2048,4095,4095},
+	{0,2048,4095,4095}
+};
+
+#define RC_MAX_COUNT 6
+#define RC_RANGE_VALUE 1023 //1000~ 1000+1023
+#define RC_MIN_VALUE 1000
+#define RC_MAX_VALUE 2023 // 
+#define RC_ROLL_ID 0
+#define RC_PITCH_ID 1
+#define RC_THR_ID 2
+#define RC_YAW_ID 3
+#define RC_AUX1_ID 4
+#define RC_AUX2_ID 5
+uint32_t rc_revert_mask = 0; // 
+uint16_t rc_user_range[RC_MAX_COUNT][2]=
+{// if any vale==0, no userful
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0}
 }
-#define scale_rc_0_to_2048(rc) (rc>>1)
-#define scale_rc_0_to_1024(rc) (rc>>2)
-#define get_rc_for_mavlink(id) ( MIN_RC_VALUE + scale_rc_0_to_1024(_get_rc(id)))
 
-
-inline uint16_t user_scale_rc(int id, uint16_t rc)
+#define fix_rc_to_zframe(rc)  { if( rc >= 0x3ff ) rc = 0x3fe; }
+inline uint16_t get_adc(int id)
 {
+	//return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : RC_MAX_VALUE ;
+	return (buf_adc[id].sum / ADC_NB_SAMPLES);
+}
+inline uint16_t get_rc(int id)
+{// return 0~RC_RANGE_VALUE
+	int range;
+	if( id < NB_ADC ){
+		range= RC_RANGE_VALUE*(get_adc(id)-adc_sensor_range[id][ADC_MIN_ID]);
+		range = range/adc_sensor_range[id][ADC_RANGE_ID];
+		fix_rc_to_zframe(range);
+	}else{
+		range = RC_MIN_VALUE;
+	}
+	return (uint16_t)range;
+}
+inline uint16_t user_revert_rc(int id, uint16_t rc)
+{
+	if( rc_revert_mask & (1<<id) != 0 ){
+
+	}
 	return rc;
 }
-inline uint16_t get_rc_for_reciver(id) {
-	uint16_t rc = scale_rc_0_to_1024(_get_rc(id)) ;
-	if( rc >= 0x3ff ) 
-		rc = 0x3fe; //so the max data is 0x3fe,and the tag is 0x3ff
 
-	return user_scale_rc(id,rc);
+inline uint16_t user_process_rc( int id, uint16_t rc)
+{
+	uint16_t value;
+	value = user_revert_rc(id,rc);
+
+	//value = user_scale_rc(id,value);//scale should be run in get_rc
+	return value;
 }
+#define get_rc_for_mavlink(id) ( RC_MIN_VALUE + get_rc(id) )
+#define get_rc_for_reciver(id) user_process_rc( id, get_rc(id) )
 
 
 
 
-#define MAX_RC_COUNT 6
-#define ZFRAME_RCS_INT_COUNT 2 // MAX_RC_COUNT/3; as each int store 3 rc, (MAX_RC_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
+#define ZFRAME_RCS_INT_COUNT 2 // RC_MAX_COUNT/3; as each int store 3 rc, (RC_MAX_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
 #define ZFRAME_BUFF_SIZE 13 //tag(2) + rcs(4*ZFRAME_RCS_INT_COUNT) + crc(2) + len(1) = 12 
 #define ZFRAME_TAG 0x3ff
 #define is_zframe_tag(L,H) (L == 0xff && H == 0x03)
@@ -297,7 +344,7 @@ inline uint16_t get_rc_for_reciver(id) {
 typedef struct _zframe_packet{
 	uint16_t tag;
 	uint8_t count;
-	uint32_t rcs[ZFRAME_RCS_INT_COUNT];//MAX_RC_COUNT/3 , rcs[0]=rc1-0-rc2-0-rc3 .... ; if reciver to sender  count =zframe_decode_false_count rc1= zframe_send_packet_count rc2 = zframe_recive_success_count
+	uint32_t rcs[ZFRAME_RCS_INT_COUNT];//RC_MAX_COUNT/3 , rcs[0]=rc1-0-rc2-0-rc3 .... ; if reciver to sender  count =zframe_decode_false_count rc1= zframe_send_packet_count rc2 = zframe_recive_success_count
 	uint16_t crc; //must put in the end
 }zframe_packet_t;
 
@@ -322,7 +369,7 @@ int check_zframe_packet(uint8_t* packet)
 		return -1;
 	}
 	/*
-	if( zframe_get_count(packet) != MAX_RC_COUNT ){
+	if( zframe_get_count(packet) != RC_MAX_COUNT ){
 		log("packet.count error =%d\n\r",zframe_get_count(packet));
 		return -1;
 	}
@@ -350,7 +397,7 @@ int decode_zframe(uint8_t* packet, uint16_t *rd)
 	p32 = zframe_get_rcs_point(packet);
 	bit_cnt = 0;
 	rc_index = 0;
-	for( i=0; i< MAX_RC_COUNT && rc_index <ZFRAME_RCS_INT_COUNT ; i++){
+	for( i=0; i< RC_MAX_COUNT && rc_index <ZFRAME_RCS_INT_COUNT ; i++){
 		rd[i]= (p32[rc_index]>>bit_cnt) & 0x3ff;	
 		bit_cnt+=11;
 		if( bit_cnt > 22 ){
@@ -358,7 +405,7 @@ int decode_zframe(uint8_t* packet, uint16_t *rd)
 			rc_index++;
 		}
 	}
-	if( i < MAX_RC_COUNT ){
+	if( i < RC_MAX_COUNT ){
 		log("decode_zframe rc count is not right\n\r");
 		return -1;
 	}
@@ -373,11 +420,11 @@ void encode_rcs(uint8_t *buff)
 	//tag
 	buff[0] = 0xff;buff[1] = 0x03;
 	//count
-	buff[2] = MAX_RC_COUNT;
+	buff[2] = RC_MAX_COUNT;
 	//rc
 	p32 = (uint32_t *)&buff[3];
 	memset(p32,0, sizeof(uint32_t)*ZFRAME_RCS_INT_COUNT);
-	for( id=0,index=0,count=0; id < MAX_RC_COUNT; id++,count+=11){
+	for( id=0,index=0,count=0; id < RC_MAX_COUNT; id++,count+=11){
 		if( count > 22 ){//count = 0 11 22
 			count = 0; 
 			index++;
@@ -460,7 +507,7 @@ int status_tid=0;
 void handle_zframe_packet_from_sender(uint8_t * data)
 {
 	int error,i;
-	uint16_t rc_data[MAX_RC_COUNT];
+	uint16_t rc_data[RC_MAX_COUNT];
 
 
 	error = decode_zframe(data,rc_data);
@@ -468,10 +515,10 @@ void handle_zframe_packet_from_sender(uint8_t * data)
 	log("get rc:\n\r");
 	if( error == 0 ){
 		zframe_recive_success_count ++;
-		for(i=0 ; i< MAX_RC_COUNT; i++) 
+		for(i=0 ; i< RC_MAX_COUNT; i++) 
 			log("RC%d=%d,",i,rc_data[i]);
 
-		//do_rc_to_pwm(rc_data,MAX_RC_COUNT);
+		//do_rc_to_pwm(rc_data,RC_MAX_COUNT);
 	}else{
 		zframe_recive_decode_false_count++;
 	}
@@ -570,7 +617,7 @@ void send_rc_to_user()
 void handle_zframe_packet_frome_reciver(uint8_t *data)
 {
 	int error,i;
-	uint16_t rc_data[MAX_RC_COUNT];
+	uint16_t rc_data[RC_MAX_COUNT];
 	uint32_t *p;
 
 	error = check_zframe_packet(data);
@@ -680,10 +727,21 @@ inline void setup()
 inline void loop()
 {
 #ifdef ZFRAME_SENDER
-	zframe_sender_loop();
+	//zframe_sender_loop();
 #endif
 #ifdef ZFRAME_RECIVER
 	zframe_reciver_loop();
+#endif
+
+#if 1
+	log("get rc:");
+	for( int i=0 ; i< 6; i++){
+		log("rc%d=%d,",i,get_rc_for_mavlink(i));
+		log("%d,,",get_adc(i));
+	}
+	log("\n\r");
+	delay_ms(100);
+
 #endif
 }
 
