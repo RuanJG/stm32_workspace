@@ -72,7 +72,7 @@ void do_echo(struct uart_periph *uart)
 	}
 }
 
-void delay_ms(int ms)
+void delay_ms(float ms)
 {
 	sys_time_usleep(ms*1000);		
 }
@@ -273,16 +273,16 @@ uint16_t adc_sensor_range[NB_ADC][4]={
 };
 
 #define RC_MAX_COUNT 6
-#define RC_RANGE_VALUE 1023 //1000~ 1000+1023
+#define RC_RANGE_VALUE 1022 //1000~ 1000+1023
 #define RC_MIN_VALUE 1000
-#define RC_MAX_VALUE 2023 // 
+#define RC_MAX_VALUE 2022 // 
 #define RC_ROLL_ID 0
 #define RC_PITCH_ID 1
 #define RC_THR_ID 2
 #define RC_YAW_ID 3
 #define RC_AUX1_ID 4
 #define RC_AUX2_ID 5
-uint32_t rc_revert_mask = 0; // 
+uint32_t rc_revert_mask = 0|1<<RC_PITCH_ID|1<<RC_ROLL_ID; // 
 uint16_t rc_user_range[RC_MAX_COUNT][2]=
 {// if any vale==0, no userful
 	{0,0},
@@ -291,9 +291,8 @@ uint16_t rc_user_range[RC_MAX_COUNT][2]=
 	{0,0},
 	{0,0},
 	{0,0}
-}
+};
 
-#define fix_rc_to_zframe(rc)  { if( rc >= 0x3ff ) rc = 0x3fe; }
 inline uint16_t get_adc(int id)
 {
 	//return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : RC_MAX_VALUE ;
@@ -303,9 +302,11 @@ inline uint16_t get_rc(int id)
 {// return 0~RC_RANGE_VALUE
 	int range;
 	if( id < NB_ADC ){
-		range= RC_RANGE_VALUE*(get_adc(id)-adc_sensor_range[id][ADC_MIN_ID]);
+		range= get_adc(id)-adc_sensor_range[id][ADC_MIN_ID];
+		if( range < 0 ) range = 0;
+		range= RC_RANGE_VALUE*range;
 		range = range/adc_sensor_range[id][ADC_RANGE_ID];
-		fix_rc_to_zframe(range);
+		if( range >= 0x3ff ) range = RC_RANGE_VALUE;
 	}else{
 		range = RC_MIN_VALUE;
 	}
@@ -313,8 +314,8 @@ inline uint16_t get_rc(int id)
 }
 inline uint16_t user_revert_rc(int id, uint16_t rc)
 {
-	if( rc_revert_mask & (1<<id) != 0 ){
-
+	if( (rc_revert_mask & (1<<id)) != 0 ){
+		return (RC_RANGE_VALUE - rc );	
 	}
 	return rc;
 }
@@ -323,7 +324,6 @@ inline uint16_t user_process_rc( int id, uint16_t rc)
 {
 	uint16_t value;
 	value = user_revert_rc(id,rc);
-
 	//value = user_scale_rc(id,value);//scale should be run in get_rc
 	return value;
 }
@@ -474,12 +474,11 @@ void collect_zframe(uint8_t *data, int len, void (*cb)(uint8_t * data))
 			cb(recive_buff);
 			index0 = 0;
 		}
-		if( index0 == 0 ){
-			if( is_zframe_tag(data[0],data[1]) ){
-				recive_buff[index0++]=data[i++];
+		if( index0 == 1 ){
+			if( is_zframe_tag(recive_buff[0],data[i]) ){
 				recive_buff[index0++]=data[i];
 			}else{
-				log("ignoring data");
+				index0 = 0;
 			}
 		}else{
 			recive_buff[index0++]=data[i];
@@ -491,7 +490,7 @@ inline void send_data_by_uart(struct uart_periph *uartz, uint8_t*data, int len)
 {
 	int i;
 	for( i = 0 ; i< len; i++)
-		uart_put_byte(uartz, data[i] );	
+		uart_put_byte(uartz, data[i]);
 }
 
 #ifdef ZFRAME_RECIVER
@@ -587,13 +586,13 @@ void send_rc_to_reciver_by_uart()
 	static uint8_t buff[ZFRAME_BUFF_SIZE]={0};
 
 	encode_rcs(buff);
-	zframe_send_packet_count++;
 	send_data_by_uart(zframeSenderUart, buff, ZFRAME_BUFF_SIZE);
+	zframe_send_packet_count++;
 }
 void display_status()
 {
-	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count );
-	log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
+	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count);
+	//log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
 }
 void send_rc_to_user()
 {
@@ -668,25 +667,25 @@ void zframe_sender_setup()
 	adc_buf_channel(ADC_6, &buf_adc[5], ADC_NB_SAMPLES);
 #endif
 
-	sendrc_tid = sys_time_register_timer(1.0/1000,send_rc_to_reciver_by_uart);	
-	status_tid =sys_time_register_timer(1.0,NULL);		
-	view_rc_tid =sys_time_register_timer(1.0/200,NULL);		
+	//57600: 1/150  115200: 1/500 2250000: 1000
+	sendrc_tid = sys_time_register_timer(1.0/150,send_rc_to_reciver_by_uart);	
+	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
+	status_tid =sys_time_register_timer(4.5,NULL);		
+	//view_rc_tid =sys_time_register_timer(1.0/200,NULL);		
 
 	mcu_int_enable();
 }
 
 void zframe_sender_loop()
 {
-	/* run in timer inttrupter 
-	if( sys_time_check_and_ack_timer(sendrc_tid) )
-		send_rc_to_reciver_by_uart();
-	*/
+	//if(uart_check_free_space(zframeSenderUart,ZFRAME_BUFF_SIZE)) 
+		//send_rc_to_reciver_by_uart();
 	listen_reciver_by_uart(zframeSenderUart);
 
 	if( sys_time_check_and_ack_timer(status_tid) )
 		display_status();
-	if( sys_time_check_and_ack_timer(view_rc_tid) )
-		send_rc_to_user();
+	//if( sys_time_check_and_ack_timer(view_rc_tid) )
+	//	send_rc_to_user();
 }
 //################################################ zframe sender
 
@@ -727,16 +726,17 @@ inline void setup()
 inline void loop()
 {
 #ifdef ZFRAME_SENDER
-	//zframe_sender_loop();
+	zframe_sender_loop();
 #endif
 #ifdef ZFRAME_RECIVER
 	zframe_reciver_loop();
 #endif
 
-#if 1
+#if 0
 	log("get rc:");
 	for( int i=0 ; i< 6; i++){
-		log("rc%d=%d,",i,get_rc_for_mavlink(i));
+	//	log("rc%d=%d,",i,get_rc_for_mavlink(i));
+		log("rc%d=%d,",i,get_rc_for_reciver(i));
 		log("%d,,",get_adc(i));
 	}
 	log("\n\r");
