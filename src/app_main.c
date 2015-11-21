@@ -19,7 +19,7 @@
 #define TELEM_COM_ID MAVLINK_COMM_0
 //#define SBUS_PPM_COM_ID MAVLINK_COMM_1
 
-#define DEBUG_APP 1
+#define DEBUG_APP 0
 #define log(format, ...) if( DEBUG_APP ) printf(format, ## __VA_ARGS__)
 
 #define CHANNELS_MAX_COUNT ACTUATORS_PWM_NB
@@ -280,7 +280,7 @@ typedef struct _zframe_packet{
 }zframe_packet_t;
 
 #define ZFRAME_UART_BUFF_SIZE 1024
-#define ZFRAME_SENDER
+//#define ZFRAME_SENDER
 //#define ZFRAME_RECIVER
 void do_dead(char *last_string)
 {
@@ -405,12 +405,11 @@ void collect_zframe(uint8_t *data, int len, void (*cb)(uint8_t * data))
 			cb(recive_buff);
 			index0 = 0;
 		}
-		if( index0 == 0 ){
-			if( is_zframe_tag(data[0],data[1]) ){
-				recive_buff[index0++]=data[i++];
+		if( index0 == 1 ){
+			if( is_zframe_tag(recive_buff[0],data[i]) ){
 				recive_buff[index0++]=data[i];
 			}else{
-				log("ignoring data");
+				index0 = 0;
 			}
 		}else{
 			recive_buff[index0++]=data[i];
@@ -446,10 +445,12 @@ void handle_zframe_packet_from_sender(uint8_t * data)
 	log("get rc:\n\r");
 	if( error == 0 ){
 		zframe_recive_success_count ++;
-		for(i=0 ; i< MAX_RC_COUNT; i++) 
+		for(i=0 ; i< MAX_RC_COUNT; i++){ 
+			rc_data[i]+= 1000;
+			if( rc_data[i] >= 2023 ) rc_data[i]=2022;
 			log("RC%d=%d,",i,rc_data[i]);
-
-		//do_rc_to_pwm(rc_data,MAX_RC_COUNT);
+		}
+		do_rc_to_pwm(rc_data,MAX_RC_COUNT);
 	}else{
 		zframe_recive_decode_false_count++;
 	}
@@ -478,7 +479,7 @@ void send_status_to_sender_by_uart()
 void zframe_reciver_setup()
 {
 	ppz_pwm_setup();
-	status_tid =sys_time_register_timer(1.0/4,NULL);		
+	status_tid =sys_time_register_timer(2.0,NULL);		
 }
 
 void zframe_reciver_loop()
