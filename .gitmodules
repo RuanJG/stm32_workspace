@@ -1,3 +1,9 @@
 [submodule "libopencm3"]
 	path = libopencm3
 	url = https://github.com/libopencm3/libopencm3.git
+[submodule "tools/stm32flash"]
+	path = tools/stm32flash
+	url = https://github.com/ARMinARM/stm32flash.git
+[submodule "tools/stlink"]
+	path = tools/stlink
+	url = https://github.com/texane/stlink
