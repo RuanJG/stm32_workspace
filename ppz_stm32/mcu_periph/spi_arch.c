@@ -702,6 +702,9 @@ void spi1_arch_init(void)
 
   // set the default configuration
   set_default_comm_config(&spi1_dma.comm);
+  //add ruan
+  spi1_dma.comm.br = SPI_CR1_BAUDRATE_FPCLK_DIV_16;
+  //
   spi1_dma.comm_sig = get_comm_signature(&spi1_dma.comm);
 
   // set init struct, indices and status
