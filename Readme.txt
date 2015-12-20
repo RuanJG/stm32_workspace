@@ -1,5 +1,6 @@
 This program is for stm32f103cbt6 , to output the 6 pwms by uart3's mavlink rc override msg;
 telem port : uart3(TX:B10 RX:B11)
+sbus port(no invert) : uart2(TX:A2)
 pwms:{
 timer3->
 	pwm1:PA6 

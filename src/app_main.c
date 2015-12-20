@@ -234,7 +234,7 @@ void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_
 		}
   	}
 }
-void do_sbus_send_pwm(int32_t * rcs, int count)
+inline void do_sbus_send_pwm(int32_t * rcs, int count)
 {
 	px4_send_sbus_data(rcs,count);
 }
@@ -428,17 +428,20 @@ inline void send_data_by_uart(struct uart_periph *uartz, uint8_t*data, int len)
 
 //################################################3 zframe reciver
 #define zframeReciverUart &uart3
+#define RECIVER_OUTPUT_SBUS 1
+#define RECIVER_OUTPUT_PWMS 1
 unsigned long zframe_recive_success_count=0;
 //unsigned long zframe_recive_packet_count=0; //packget_count = success+false
 unsigned long zframe_recive_decode_false_count=0;
 unsigned long zframe_send_packet_count = 0;
 int status_tid=0;
+int sendrc_tid=0;
+uint16_t rc_data[MAX_RC_COUNT]={1000};
+uint32_t rc_sbus_data[MAX_RC_COUNT]={1000};
 
 void handle_zframe_packet_from_sender(uint8_t * data)
 {
 	int error,i;
-	uint16_t rc_data[MAX_RC_COUNT];
-
 
 	error = decode_zframe(data,rc_data);
 
@@ -448,9 +451,9 @@ void handle_zframe_packet_from_sender(uint8_t * data)
 		for(i=0 ; i< MAX_RC_COUNT; i++){ 
 			rc_data[i]+= 1000;
 			if( rc_data[i] >= 2023 ) rc_data[i]=2022;
+			rc_sbus_data[i] = rc_data[i];
 			log("RC%d=%d,",i,rc_data[i]);
 		}
-		do_rc_to_pwm(rc_data,MAX_RC_COUNT);
 	}else{
 		zframe_recive_decode_false_count++;
 	}
@@ -480,17 +483,26 @@ void zframe_reciver_setup()
 {
 	ppz_pwm_setup();
 	status_tid =sys_time_register_timer(2.0,NULL);		
+	sendrc_tid =sys_time_register_timer(1.0/100,NULL);		
 }
 
 void zframe_reciver_loop()
 {
 	listen_sender_by_uart(zframeReciverUart);
-
+	if( sys_time_check_and_ack_timer(sendrc_tid) ){
+	#if RECIVER_OUTPUT_PWMS
+		do_rc_to_pwm(rc_data,MAX_RC_COUNT);
+	#endif
+	#if RECIVER_OUTPUT_SBUS
+		do_sbus_send_pwm(rc_sbus_data,MAX_RC_COUNT);
+	#endif
+	}
 	if( sys_time_check_and_ack_timer(status_tid) ){
 		send_status_to_sender_by_uart();
 		log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_recive_success_count,zframe_recive_decode_false_count );
 	}
 }
+
 //################################################3 zframe reciver
 
 #endif //ZFRAME_RECIVER
