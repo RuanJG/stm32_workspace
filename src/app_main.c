@@ -321,10 +321,12 @@ uint8_t is_2g_cmd_ok = 0;
 
 uint8_t is_2g_inited_ok = 0;
 uint8_t is_2g_connected = 0;
+uint8_t is_2g_at_test_ok = 0;
 float last_heartbeat_time = 0;
 //cmd
 #define ACCEPT_CALL_STRING "ATA\r\n"  //if ok start send rc
 #define SET_DTMF_ECHO_STRING "AT+DDET=1\r\n" //if ok  ,start listen call
+#define TEST_AT_OK "AT\r\n"
 //result
 #define OK_STRING "OK\r\n"
 #define ERROR_STRING "ERROR\r\n"
@@ -416,7 +418,10 @@ void send_setmode_message(int mode)
 	mode_sp.base_mode = (uint8_t)MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;// g_current_heartbeat.base_mode;// MAV_MODE_FLAG_CUSTOM_MODE_ENABLED  ;// MAV_MODE_FLAG_DECODE_POSITION_SAFETY ;
   mode_sp.custom_mode = (uint32_t)mode;
   mavlink_msg_set_mode_encode(copter_sysid, copter_compid, &message , &mode_sp);
+  //log("set mode sysid=%d,compid=%d\r\n",copter_sysid,copter_compid);
   send_mavlink_message(COPTER_UART,&message);
+  //mavlink_msg_set_mode_encode(250, 190, &message , &mode_sp);
+  //send_mavlink_message(COPTER_UART,&message);
   
 }
 
@@ -480,7 +485,10 @@ void sync_g_heartbeat_message(mavlink_message_t *msg)
 	copter_compid = msg->compid;
 
 	last_heartbeat_time = get_sys_time_float();
+#if DEBUG_APP
 	log("get a heart mavlink msg\r\n");
+	if( is_2g_at_test_ok != 1 )send_2g_cmd_string(TEST_AT_OK);
+#endif
 }
 
 
@@ -515,12 +523,14 @@ void do_takeoff_key_event()
 	if( is_copter_connected()==0 )
 		return;
 	log("setmode...");
-	while( count++ < 20 && GUIDED != get_copter_mode() ){
+	while( count++ < 30 && GUIDED != get_copter_mode() ){
 		delay_ms(100);
 		send_setmode_message(GUIDED);
 	}
-	if( GUIDED != get_copter_mode() )
+	if( GUIDED != get_copter_mode() ){
+		log("false\r\n");
 		return ;
+	}
 
 	clear_mavlink_rc_value();
 	do_send_rc_override_to_copter();
@@ -529,10 +539,11 @@ void do_takeoff_key_event()
 	count = 0;
 	while( count++ < 10 && is_copter_armed() == 0 ){
 		send_arm_disarm_message(1);
-		delay_ms(200);
+		delay_ms(300);
 	}
 	if( is_copter_armed() == 0 ){
 		send_arm_disarm_message(0);
+		log("false\r\n");
 		return ;
 	}
 	send_takeoff_message(10);
@@ -674,10 +685,14 @@ void handle_2g_cmd_result()
 		log("ACCEPT_CALL_STRING cmd res=%d\r\n",is_2g_cmd_ok);
 		is_2g_connected  = 0;
 		if( is_2g_cmd_ok ) is_2g_connected = 1;
+	}else if( 1 == is_string(current_2g_cmd,TEST_AT_OK) ){
+		log("AT cmd res=%d\r\n",is_2g_cmd_ok);
+		if( is_2g_cmd_ok ) is_2g_at_test_ok = 1;
 	}
 }
 void handle_2g_one_line(uint8_t *buff, int len)
 {
+	int i;
 	log("%s",buff);
 	if( is_string(buff, OK_STRING) ) {
 		//is_2g_cmd_finished = 0;
@@ -687,7 +702,7 @@ void handle_2g_one_line(uint8_t *buff, int len)
 		//is_2g_cmd_finished = 0;
 		is_2g_cmd_ok = 0;
 		handle_2g_cmd_result();
-	}else if( is_string(buff, ACCEPT_CALL_STRING) || is_string(buff,SET_DTMF_ECHO_STRING) ) {
+	}else if( is_string(buff, ACCEPT_CALL_STRING) || is_string(buff,SET_DTMF_ECHO_STRING) || is_string(buff,TEST_AT_OK) ) {
 		memcpy(current_2g_cmd,buff,len);
 		current_2g_cmd[len]=0;
 		//log("current cmd=%s,len=%d\r\n",current_2g_cmd,len);
@@ -700,7 +715,12 @@ void handle_2g_one_line(uint8_t *buff, int len)
 	}else if( is_string( buff , BREAK_CALL_STRING) ){
 		log("call break\r\n");
 		is_2g_connected = 0;
-		send_setmode_message(GUIDED);
+		for( i=0; i< 10; i++){
+			if( GUIDED == get_copter_mode(0) )
+				break;
+			send_setmode_message(GUIDED);
+			delay_ms(200);
+		}
 	}else if( len > 8 &&  (0 == strncmp(buff, DTMF_HEAD_STRING, 6)) ) {
 		handle_2g_key_event(buff[6]);
 	}
@@ -715,8 +735,10 @@ void do_listen_2G()
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(REMOTE_2G_UART);
 
-		//for( i = 0 ; i< data_len; i++)
-		//	uart_put_byte(CONSOLE_UART,buff[i]);
+#if DEBUG_APP
+		for( i = 0 ; i< data_len; i++)
+			uart_put_byte(CONSOLE_UART,buff[i]);
+#endif
 	
 		for( i = 0; i< data_len; i++){
 			if( buff[i] == '\n' ){
@@ -735,9 +757,9 @@ void do_listen_2G()
 }
 void do_listen_copter_for_2g()
 {
-	do_copy_uart_and_handle_mavlink_msg(COPTER_UART,NULL,sync_g_heartbeat_message);
-	//do_copy_uart_and_handle_mavlink_msg(COPTER_UART,REMOTE_4G_UART,sync_g_heartbeat_message);
-	//do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
+	//do_copy_uart_and_handle_mavlink_msg(COPTER_UART,NULL,sync_g_heartbeat_message);
+	do_copy_uart_and_handle_mavlink_msg(COPTER_UART,REMOTE_4G_UART,sync_g_heartbeat_message);
+	do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
 }
 
 
@@ -805,7 +827,7 @@ void setup()
 
 	setup_2G_data_init();
 	sendrc_tid = sys_time_register_timer(1.0/50,NULL);
-	//copter_tid = sys_time_register_timer(1.0/100,do_listen_copter_for_2g);
+	copter_tid = sys_time_register_timer(1.0/100,do_listen_copter_for_2g);
 	log("start app\r\n");
 }
 inline void loop()
@@ -814,12 +836,11 @@ inline void loop()
 	//loop_telem_and_sbusppm_to_copter();
 
 
-	//loop_4g_and_2g_to_copter();
 	do_listen_2G();
-	do_listen_copter_for_2g();
+	//do_listen_copter_for_2g();
 	if( sys_time_check_and_ack_timer(sendrc_tid) )
 		do_send_rc_override_to_copter();
-	
+
 	//do_copy_uart_data_to_other_uart(CONSOLE_UART, REMOTE_2G_UART);
 	//do_copy_uart_data_to_other_uart(REMOTE_2G_UART, CONSOLE_UART);
 
