@@ -758,8 +758,11 @@ void do_listen_2G()
 void do_listen_copter_for_2g()
 {
 	//do_copy_uart_and_handle_mavlink_msg(COPTER_UART,NULL,sync_g_heartbeat_message);
+
 	do_copy_uart_and_handle_mavlink_msg(COPTER_UART,REMOTE_4G_UART,sync_g_heartbeat_message);
+	//do_copy_uart_data_to_other_uart(COPTER_UART,REMOTE_4G_UART);
 	do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
+
 }
 
 
@@ -827,7 +830,7 @@ void setup()
 
 	setup_2G_data_init();
 	sendrc_tid = sys_time_register_timer(1.0/50,NULL);
-	copter_tid = sys_time_register_timer(1.0/100,do_listen_copter_for_2g);
+	copter_tid = sys_time_register_timer(1.0/200,do_listen_copter_for_2g);
 	log("start app\r\n");
 }
 inline void loop()
@@ -837,12 +840,11 @@ inline void loop()
 
 
 	do_listen_2G();
-	//do_listen_copter_for_2g();
 	if( sys_time_check_and_ack_timer(sendrc_tid) )
 		do_send_rc_override_to_copter();
 
-	//do_copy_uart_data_to_other_uart(CONSOLE_UART, REMOTE_2G_UART);
-	//do_copy_uart_data_to_other_uart(REMOTE_2G_UART, CONSOLE_UART);
+	//do_copy_uart_data_to_other_uart(COPTER_UART, REMOTE_4G_UART);
+	//do_copy_uart_data_to_other_uart(REMOTE_4G_UART, COPTER_UART);
 
 	//delay_ms(10);
 	//do_echo(&uart1);
