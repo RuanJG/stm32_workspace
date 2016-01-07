@@ -25,6 +25,143 @@
 
 #define CHANNELS_MAX_COUNT ACTUATORS_PWM_NB
 
+
+
+
+
+
+
+
+
+//******************************************************  curve expo
+
+#define RESX_SHIFT 10
+#define RESX       1024
+#define RESXu      1024u
+#define RESXul     1024ul
+#define RESXl      1024l
+
+#define CORRECT_NEGATIVE_SHIFTS
+int16_t calc100to256_16Bits(int16_t x) // return x*2.56
+{
+    // y = 2*x + x/2 +x/16-x/512-x/2048
+    // 512 and 2048 are out of scope from int8 input --> forget it
+#ifdef CORRECT_NEGATIVE_SHIFTS
+    int16_t res=(int16_t)x<<1;
+    //int8_t  sign=(uint8_t) x>>7;
+    int8_t sign=(x<0?1:0);
+    x-=sign;
+    res+=(x>>1);
+    res+=sign;
+    res+=(x>>4);
+    res+=sign;
+    return res;
+#else
+    return ((int16_t)x<<1)+(x>>1)+(x>>4);
+#endif
+}
+int16_t calc100to256(int8_t x) // return x*2.56
+{
+  return calc100to256_16Bits(x);
+}
+// expo-funktion:
+// ---------------
+// kmplot
+// f(x,k)=exp(ln(x)*k/10) ;P[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+// f(x,k)=x*x*x*k/10 + x*(1-k/10) ;P[0,1,2,3,4,5,6,7,8,9,10]
+// f(x,k)=x*x*k/10 + x*(1-k/10) ;P[0,1,2,3,4,5,6,7,8,9,10]
+// f(x,k)=1+(x-1)*(x-1)*(x-1)*k/10 + (x-1)*(1-k/10) ;P[0,1,2,3,4,5,6,7,8,9,10]
+// don't know what this above should be, just confusing in my opinion,
+
+// here is the real explanation
+// actually the real formula is
+/*
+ f(x) = exp( ln(x) * 10^k)
+ if it is 10^k or e^k or 2^k etc. just defines the max distortion of the expo curve; I think 10 is useful
+ this gives values from 0 to 1 for x and output; k must be between -1 and +1
+ we do not like to calculate with floating point. Therefore we rescale for x from 0 to 1024 and for k from -100 to +100
+ f(x) = 1024 * ( e^( ln(x/1024) * 10^(k/100) ) )
+ This would be really hard to be calculated by such a microcontroller
+ Therefore Thomas Husterer compared a few usual function something like x^3, x^4*something, which look similar
+ Actually the formula
+ f(x) = k*x^3+x*(1-k)
+ gives a similar form and should have even advantages compared to a original exp curve.
+ This function again expect x from 0 to 1 and k only from 0 to 1
+ Therefore rescaling is needed like before:
+ f(x) = 1024* ((k/100)*(x/1024)^3 + (x/1024)*(100-k)/100)
+ some mathematical tricks
+ f(x) = (k*x*x*x/(1024*1024) + x*(100-k)) / 100
+ for better rounding results we add the 50
+ f(x) = (k*x*x*x/(1024*1024) + x*(100-k) + 50) / 100
+
+ because we now understand the formula, we can optimize it further
+ --> calc100to256(k) --> eliminates /100 by replacing with /256 which is just a simple shift right 8
+ k is now between 0 and 256
+ f(x) = (k*x*x*x/(1024*1024) + x*(256-k) + 128) / 256
+ */
+
+// input parameters;
+//  x 0 to 1024;
+//  k 0 to 100;
+// output between 0 and 1024
+// #define EXTENDED_EXPO
+// increases range of expo curve but costs about 82 bytes flash
+unsigned int expou(unsigned int x, unsigned int k)
+{
+#if defined(EXTENDED_EXPO)
+  bool extended;
+  if (k>80) {
+    extended=true;
+  }
+  else {
+    k += (k>>2);  // use bigger values before extend, because the effect is anyway very very low
+    extended=false;
+  }
+#endif
+
+  k = calc100to256(k);
+
+  uint32_t value = (uint32_t) x*x;
+  value *= (uint32_t)k;
+  value >>= 8;
+  value *= (uint32_t)x;
+
+#if defined(EXTENDED_EXPO)
+  if (extended) {  // for higher values do more multiplications to get a stronger expo curve
+    value >>= 16;
+    value *= (uint32_t)x;
+    value >>= 4;
+    value *= (uint32_t)x;
+  }
+#endif
+
+  value >>= 12;
+  value += (uint32_t)(256-k)*x+128;
+
+  return value>>8;
+}
+
+int expo(int x, int k)
+{
+  if (k == 0) return x;
+  int y;
+  int neg = (x < 0);
+
+  if (neg) x = -x;
+  if (k<0) {
+    y = RESXu-expou(RESXu-x, -k);
+  }
+  else {
+    y = expou(x, k);
+  }
+  return neg? -y : y;
+}
+//**************************************************************** curve expo
+
+
+
+
+
 //#include "uart.c"
 int do_uart_wirte(struct uart_periph *uart,uint8_t *buff,int len)
 {
@@ -196,6 +333,9 @@ void do_copy_uart_data_to_two_uart( struct uart_periph *uarts ,struct uart_perip
 		}
 	}
 }
+
+void do_rc_config( mavlink_message_t * msg);
+
 void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_periph *uartd)
 {
 	mavlink_message_t msg; 
@@ -225,7 +365,11 @@ void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_
 						rcs[6] = mavlink_msg_rc_channels_override_get_chan7_raw(&msg);
 						rcs[7] = mavlink_msg_rc_channels_override_get_chan8_raw(&msg);
 						do_rc_to_pwm(rcs,CHANNELS_MAX_COUNT);
-
+						break;
+					}
+					case MAVLINK_MSG_ID_RC_CHANNELS: {
+						do_rc_config(&msg);
+						break;
 					}
 					default:
        		         			break;
@@ -292,13 +436,164 @@ uint16_t rc_user_range[RC_MAX_COUNT][2]=
 	{0,0},
 	{0,0}
 };
+inline uint16_t get_rc_min_value(int id){
+	if( rc_user_range[id][0] != 0 )
+		return rc_user_range[id][0];
+	return RC_MIN_VALUE;
+}
+inline uint16_t get_rc_max_value(int id){
+	if( rc_user_range[id][1] != 0 )
+		return rc_user_range[id][1];
+	return RC_MAX_VALUE;
+}
+short rc_user_cuver[RC_MAX_COUNT][2]={
+	//[paramk[-100~100],type[0 thr,1 middle]
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0},
+	{0,0}
+};
+short rc_user_trim[RC_MAX_COUNT]={0};//+- 100
+uint16_t rc_value_list[RC_MAX_COUNT]={0};
+typedef struct _rc_mix_type {
+	char main_id ;
+	char slave_id ;
+	float add_persen ;
+	float sub_persen ;
+	char start_position ;
+	char valiable ;
+}rc_mix_type;
+#define MIX_LIST_MAX_COUNT 4
+rc_mix_type mix_list[MIX_LIST_MAX_COUNT];
+void init_rc_mix_list()
+{
+	int i;
+	for( i=0 ; i< MIX_LIST_MAX_COUNT; i++)
+		mix_list[i].valiable = 0;
+}
+rc_mix_type *get_empty_rc_mix()
+{
+	int i;
+	for ( i=0; i< MIX_LIST_MAX_COUNT; i++){
+		if( mix_list[i].valiable == 0 )
+			return &mix_list[i];
+	}
+	return NULL;
+}
+#define BASE_CONFIG_ID 0
+#define MIX_CONFIG_ID 1
+void do_rc_config( mavlink_message_t * msg)
+{
+	mavlink_rc_channels_t packet;
+	int id,curve_paramk,curve_type,min,max,trim,revert;
+	short tmp;
+	rc_mix_type *rc_mix;
 
+
+	mavlink_msg_rc_channels_decode(msg,&packet);
+
+	if( packet.time_boot_ms == BASE_CONFIG_ID){
+		id = packet.chan1_raw;
+		if( id < 0 || id >= RC_MAX_COUNT){
+			log("do_rc_config: id is no fix\n");
+			return;
+		}
+		log("do_rc_config: id=%d\n",id);
+		//-----------  curve 
+		curve_paramk = packet.chan2_raw;
+		curve_type = packet.chan3_raw;
+		if( curve_paramk >= -100 && curve_paramk <= 100 ){
+			log("set curve_paramk=%d\n",curve_paramk);
+			rc_user_cuver[id][0] = curve_paramk;
+		}
+		if( curve_type == 0 || curve_type == 1 ){
+			log("set curve_type=%d\n",curve_type);
+			rc_user_cuver[id][1] = curve_type;
+		}
+		//-------------- MIN MAX
+		min = packet.chan5_raw;
+		max = packet.chan4_raw;
+		if( min > max ){
+			min = max; 
+			max = packet.chan5_raw;
+		}
+		if( max > RC_MAX_VALUE ) max = RC_MAX_VALUE;
+		if( min != 0 && max != 0 ){
+			rc_user_range[id][0]=min;
+			rc_user_range[id][1] = max;
+			log("set min=%d,max=%d\n",min,max);
+		}
+		//-------------- trim
+		trim = packet.chan6_raw;
+		if( trim >= -200 && trim <= 200 ){
+			rc_user_trim[id] = trim;
+			log("set trim=%d\n",trim);
+		}
+		//--------------- revert
+		revert = packet.chan7_raw;
+		if( revert == 1 ){
+			rc_revert_mask |= 1<<id;
+			log("set revert=%d\n",revert);
+		}
+	}else if(packet.time_boot_ms == MIX_CONFIG_ID){
+		rc_mix = get_empty_rc_mix();
+		if( rc_mix == NULL ) {
+			log("no empty mix for new one\n");
+			return;
+		}
+		//main id
+		tmp = packet.chan1_raw;
+		if( tmp < 0 || tmp >= RC_MAX_COUNT){
+			log("bad mix maind id\n");
+			return;
+		}
+		rc_mix->main_id = tmp;
+		log("mix main id=%d\n",tmp);
+		//slave_id
+		tmp = packet.chan2_raw;
+		if( tmp < 0 || tmp >= RC_MAX_COUNT ){
+			log("bad mix slave id\n");
+			return;
+		}
+		rc_mix->slave_id = tmp;
+		log("mix slave id=%d\n",tmp);
+		//start position
+		tmp = packet.chan3_raw;
+		rc_mix->start_position = tmp;
+		log("mix start position=%d\n",tmp);
+		//add_persen
+		tmp = packet.chan4_raw;
+		if( tmp < -100 || tmp > 100 ){
+			log("bad mix add persen=%d\n",tmp);
+			return;
+		}
+		rc_mix->add_persen = tmp/100;
+		log("mix add persen=%f\n",rc_mix->add_persen);
+		//sub_persen
+		tmp = packet.chan5_raw;
+		if( tmp < -100 || tmp > 100 ){
+			log("bad mix sub persen=%d\n",tmp);
+			return;
+		}
+		rc_mix->sub_persen = tmp/100;
+		log("mix sub persen=%f\n",rc_mix->sub_persen);
+
+		rc_mix->valiable = 1;
+	}
+}
 inline uint16_t get_adc(int id)
 {
 	//return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : RC_MAX_VALUE ;
 	return (buf_adc[id].sum / ADC_NB_SAMPLES);
 }
-inline uint16_t get_rc(int id)
+uint16_t get_rc(int id){ 
+	if( id >=0 && id < RC_MAX_COUNT )
+		return rc_value_list[id];
+	return RC_MIN_VALUE;
+}
+inline uint16_t get_rc_raw(int id)
 {// return 0~RC_RANGE_VALUE
 	int range;
 	if( id < NB_ADC ){
@@ -308,27 +603,120 @@ inline uint16_t get_rc(int id)
 		range = range/adc_sensor_range[id][ADC_RANGE_ID];
 		if( range >= 0x3ff ) range = RC_RANGE_VALUE;
 	}else{
-		range = RC_MIN_VALUE;
+		range = 0;
 	}
 	return (uint16_t)range;
 }
-inline uint16_t user_revert_rc(int id, uint16_t rc)
+inline uint16_t user_revert_rc_raw(int id, uint16_t rc)
 {
 	if( (rc_revert_mask & (1<<id)) != 0 ){
 		return (RC_RANGE_VALUE - rc );	
 	}
 	return rc;
 }
+inline uint16_t user_curve_rc_raw(int id, uint16_t rc){
+	short paramk,type;
+	int tmp;
+	paramk=rc_user_cuver[id][0];
+	type=rc_user_cuver[id][1];
 
-inline uint16_t user_process_rc( int id, uint16_t rc)
-{
-	uint16_t value;
-	value = user_revert_rc(id,rc);
-	//value = user_scale_rc(id,value);//scale should be run in get_rc
-	return value;
+	if( paramk == 0 )
+		return rc;
+	
+	if( type == 0){
+		return expo(rc,paramk);
+	}else{
+		tmp = (rc<<1) - RC_RANGE_VALUE;// 2*(rc-1022/2) 
+		tmp = expo(tmp,paramk);
+
+		tmp += RC_RANGE_VALUE; // tmp/2+1022/2
+		tmp = tmp >> 1;
+		return tmp;
+	}
+
 }
+uint16_t user_zoom_rc(int id, uint16_t rc_raw){
+	uint16_t min,max,rang,rc_z;
+	min = rc_user_range[id][0];
+	max = rc_user_range[id][1];
+	if( min != 0 && max != 0 ){
+		rang= max-min;
+		rc_z = min+ rc_raw * ( rang/RC_RANGE_VALUE );
+		//if( rc_z < RC_MIN_VALUE ) rc_z = RC_MIN_VALUE;
+		if( rc_z > RC_MAX_VALUE ) rc_z = RC_MAX_VALUE;
+		return rc_z;
+	}else{
+		return rc_raw+RC_MIN_VALUE;
+	}
+}
+
+inline uint16_t cail_user_mix_rc(){
+	int i,sid,mid;
+	float again[RC_MAX_COUNT]={0};
+	uint16_t middle_val=0;
+
+	for( i=0 ; i < MIX_LIST_MAX_COUNT ; i++){
+		if( mix_list[i].valiable == 1 ){
+			sid = mix_list[i].slave_id;
+			mid = mix_list[i].main_id;
+			if( mix_list[i].start_position == 0){
+				if( mix_list[i].add_persen != 0){
+					again[sid] = mix_list[i].add_persen * (rc_value_list[mid]- get_rc_min_value(mid));
+				}
+			}else{
+				middle_val = (get_rc_max_value(mid)-get_rc_min_value(mid))/2;
+				middle_val += get_rc_min_value(mid);
+
+				if( middle_val > get_rc(mid) ){
+					if( mix_list[i].sub_persen != 0){
+						again[sid] = -1*mix_list[i].sub_persen * (middle_val - get_rc(sid)); 
+					}
+				}else{
+					if( mix_list[i].add_persen != 0){
+						again[sid] = mix_list[i].add_persen * (get_rc(sid)-middle_val) ;
+					}
+				}
+			}
+		}
+	}
+	for( i=0 ; i < RC_MAX_COUNT ; i++){
+		if( again[i] != 0 ){
+			rc_value_list[i] += again[i]; 
+		}
+	}
+
+}
+inline uint16_t cail_user_trim_rc(){
+	int i;
+	for( i=0 ; i< RC_MAX_COUNT; i++){
+		if( rc_user_trim[i] != 0 ){
+			rc_value_list[i]+= rc_user_trim[i];
+			if( rc_value_list[i] < RC_MIN_VALUE)
+				rc_value_list[i] = RC_MIN_VALUE;
+			if( rc_value_list[i] > RC_MAX_VALUE)
+				rc_value_list[i] = RC_MAX_VALUE;
+		}
+	}
+}
+
+void update_rc()
+{
+	int i;
+	uint16_t rc;
+
+	for( i=0; i< RC_MAX_COUNT; i++){
+		rc = get_rc_raw(i);	
+		rc = user_revert_rc_raw(i,rc);
+		rc = user_curve_rc_raw(i,rc);
+		rc_value_list[i] = user_zoom_rc(i,rc);
+	}
+	cail_user_mix_rc();
+	cail_user_trim_rc();
+}
+
+
 #define get_rc_for_mavlink(id) ( RC_MIN_VALUE + get_rc(id) )
-#define get_rc_for_reciver(id) user_process_rc( id, get_rc(id) )
+#define get_rc_for_reciver(id) get_rc(id)
 
 
 
@@ -668,12 +1056,14 @@ void zframe_sender_setup()
 #endif
 
 	//57600: 1/150  115200: 1/500 2250000: 1000
-	sendrc_tid = sys_time_register_timer(1.0/150,send_rc_to_reciver_by_uart);	
+	sendrc_tid = sys_time_register_timer(1.0/150,NULL);	
 	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
 	status_tid =sys_time_register_timer(4.5,NULL);		
 	//view_rc_tid =sys_time_register_timer(1.0/200,NULL);		
 
 	mcu_int_enable();
+
+	init_rc_mix_list();
 }
 
 void zframe_sender_loop()
@@ -684,6 +1074,11 @@ void zframe_sender_loop()
 
 	if( sys_time_check_and_ack_timer(status_tid) )
 		display_status();
+	
+	if( sys_time_check_and_ack_timer(sendrc_tid) ){
+		update_rc();
+		send_rc_to_reciver_by_uart();
+	}
 	//if( sys_time_check_and_ack_timer(view_rc_tid) )
 	//	send_rc_to_user();
 }
