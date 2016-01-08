@@ -233,12 +233,15 @@ inline uint8_t get_uart_mavlink_com(struct uart_periph *uarts)
 	else if( uarts == &uart3 ) com = MAVLINK_COMM_2; 
 	return com;
 }
+
+#define TMP_BUFF_SIZE 128
 void do_copy_uart_data_to_other_uart(struct uart_periph *uarts ,struct uart_periph *uartd)
 {
 	int data_len,i;
-	uint8_t buff[UART_RX_BUFFER_SIZE];
+	uint8_t buff[TMP_BUFF_SIZE];
 
 	data_len = uart_char_available(uarts);
+	if( data_len > TMP_BUFF_SIZE ) data_len = TMP_BUFF_SIZE;
 	if( data_len > 0 ){
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(uarts);
@@ -251,8 +254,9 @@ void do_copy_uart_data_to_two_uart( struct uart_periph *uarts ,struct uart_perip
 {
 	int data_len,i;
 	uint8_t c;
-	uint8_t buff[UART_RX_BUFFER_SIZE];
+	uint8_t buff[TMP_BUFF_SIZE];
 	data_len = uart_char_available(uarts);
+	if( data_len > TMP_BUFF_SIZE ) data_len = TMP_BUFF_SIZE;
 	if( data_len > 0 ){
 		for( i = 0 ; i< data_len; i++){
 			buff[i] = uart_getch(uarts);
@@ -280,26 +284,30 @@ void do_mavlink_rc_override_to_pwm(mavlink_message_t *msg)
 		do_rc_to_pwm(rcs,CHANNELS_MAX_COUNT);
 	}
 }
+uint8_t tmp_buff[TMP_BUFF_SIZE];
 void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_periph *uartd, void (*handler)(mavlink_message_t *msg) )
 {
 	mavlink_message_t msg; 
 	mavlink_status_t status;
 	int data_len,i;
-	uint8_t buff[UART_RX_BUFFER_SIZE];
 	uint8_t com = get_uart_mavlink_com(uarts);
 
 	data_len = uart_char_available(uarts);
+	if( data_len > TMP_BUFF_SIZE ){
+		log("Buff too small\r\n");
+		data_len = TMP_BUFF_SIZE;
+	}
 	if( data_len > 0 ){
 		for( i = 0 ; i< data_len; i++)
-			buff[i] = uart_getch(uarts);
+			tmp_buff[i] = uart_getch(uarts);
 	
 		if( uartd != NULL ){
 			for( i = 0 ; i< data_len; i++)
-				uart_put_byte(uartd, buff[i] );
+				uart_put_byte(uartd, tmp_buff[i] );
 		}
 
 		for( i = 0 ; i< data_len; i++){
-			if( mavlink_parse_char(com, buff[i], &msg, &status) ) { 
+			if( mavlink_parse_char(com, tmp_buff[i], &msg, &status) ) { 
       				handler(&msg);
     			}
 		}
@@ -334,6 +342,7 @@ float last_heartbeat_time = 0;
 #define CALLING_STRING "RING\r\n" // if start listen call , accept it
 #define BREAK_CALL_STRING "NO CARRIER\r\n" // set mode guied and stop send rc
 #define DTMF_HEAD_STRING "+DTMF:" //+DTMF:3
+#define REJUST_CALL "BUSY\r\n"
 
 
 void clear_mavlink_rc_value()
@@ -485,10 +494,7 @@ void sync_g_heartbeat_message(mavlink_message_t *msg)
 	copter_compid = msg->compid;
 
 	last_heartbeat_time = get_sys_time_float();
-#if DEBUG_APP
 	log("get a heart mavlink msg\r\n");
-	if( is_2g_at_test_ok != 1 )send_2g_cmd_string(TEST_AT_OK);
-#endif
 }
 
 
@@ -728,9 +734,10 @@ void handle_2g_one_line(uint8_t *buff, int len)
 void do_listen_2G()
 {
 	int data_len,i;
-	uint8_t buff[UART_RX_BUFFER_SIZE];
+	uint8_t buff[TMP_BUFF_SIZE];
 
 	data_len = uart_char_available(REMOTE_2G_UART);
+	if( data_len > TMP_BUFF_SIZE ) data_len = TMP_BUFF_SIZE;
 	if( data_len > 0 ){
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(REMOTE_2G_UART);
@@ -758,9 +765,11 @@ void do_listen_2G()
 void do_listen_copter_for_2g()
 {
 	//do_copy_uart_and_handle_mavlink_msg(COPTER_UART,NULL,sync_g_heartbeat_message);
+#if DEBUG_APP
+	do_copy_uart_data_to_other_uart(CONSOLE_UART,REMOTE_2G_UART);
+#endif
 
 	do_copy_uart_and_handle_mavlink_msg(COPTER_UART,REMOTE_4G_UART,sync_g_heartbeat_message);
-	//do_copy_uart_data_to_other_uart(COPTER_UART,REMOTE_4G_UART);
 	do_copy_uart_data_to_other_uart(REMOTE_4G_UART,COPTER_UART);
 
 }
@@ -803,6 +812,7 @@ void setup_2G_data_init()
 
 int sendrc_tid = 0;
 int copter_tid = 0;
+int test_AT_tid = 0;
 
 void setup()
 {
@@ -830,6 +840,7 @@ void setup()
 
 	setup_2G_data_init();
 	sendrc_tid = sys_time_register_timer(1.0/50,NULL);
+	test_AT_tid = sys_time_register_timer(2.0,NULL);
 	copter_tid = sys_time_register_timer(1.0/200,do_listen_copter_for_2g);
 	log("start app\r\n");
 }
@@ -842,6 +853,9 @@ inline void loop()
 	do_listen_2G();
 	if( sys_time_check_and_ack_timer(sendrc_tid) )
 		do_send_rc_override_to_copter();
+
+
+	if( is_2g_at_test_ok != 1 && sys_time_check_and_ack_timer(test_AT_tid)) send_2g_cmd_string(TEST_AT_OK);
 
 	//do_copy_uart_data_to_other_uart(COPTER_UART, REMOTE_4G_UART);
 	//do_copy_uart_data_to_other_uart(REMOTE_4G_UART, COPTER_UART);
