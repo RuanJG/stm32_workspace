@@ -349,7 +349,7 @@ void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(uarts);
 	
-		for( i = 0 ; i< data_len; i++)
+		for( i = 0 ; i< data_len && uartd != NULL; i++)
 			uart_put_byte(uartd, buff[i] );
 	
 		for( i = 0 ; i< data_len; i++){
@@ -404,29 +404,66 @@ void loop_telem_and_sbusppm_to_copter()
 static struct adc_buf buf_adc[NB_ADC];
 
 #define ADC_MIN_ID 0
-#define ADC_TRIM_ID 1
+#define ADC_MIDDLE_ID 1
 #define ADC_MAX_ID 2
 #define ADC_RANGE_ID 3
 uint16_t adc_sensor_range[NB_ADC][4]={
+/* fushi jostick param
 	{1020,2281,3460, 2440},
 	{710, 1967, 3200, 2390},
 	{800, 1949, 3150, 2350},
 	{640, 1829, 3150, 2530},
 	{0,2048,4095,4095},
 	{0,2048,4095,4095}
+*/
+///* sumsang jostick param
+	//the [3] is range , in adc_sensor_cali_init will fill it 
+	{100,2044,3800,0},
+	{200, 2043, 3700,0},
+	{300, 2030, 3750,0},
+	{400, 2160, 4090,0},
+	{0,2045,4095,0},
+	{0,2045,4095,0}
+//*/
 };
+float adc_sensor_again[NB_ADC][2]={
+	// adc_sensor_range[1] - adc_sensor_range[0] / 500
+	{0.0,0.0},	
+	{0.0,0.0},	
+	{0.0,0.0},	
+	{0.0,0.0},	
+	{0.0,0.0},	
+	{0.0,0.0}	
+};
+void adc_sensor_cali_init()
+{
+	int i;
+	for( i=0; i< NB_ADC; i++){
+		/*
+		if( adc_sensor_range[i][1] > 0 ){
+			adc_sensor_again[i][0] = 500.0/(adc_sensor_range[i][1]-adc_sensor_range[i][0]);
+			adc_sensor_again[i][1] = 500.0/(adc_sensor_range[i][2]-adc_sensor_range[i][1]);
+		}else{
+			adc_sensor_again[i][0] = 0.0;
+			adc_sensor_again[i][1] = 0.0;
+		}
+		log("%f,  %f \r\n",adc_sensor_again[i][0],adc_sensor_again[i][1]);
+		*/
+		adc_sensor_range[i][ADC_RANGE_ID] = adc_sensor_range[i][ADC_MAX_ID] - adc_sensor_range[i][ADC_MIN_ID];
+	}
+}
 
-#define RC_MAX_COUNT 6
-#define RC_RANGE_VALUE 1022 //1000~ 1000+1023
+#define RC_MAX_COUNT NB_ADC
+#define RC_RANGE_VALUE 1000 //1022 //1000~ 1000+1023 , this may effect adc_sensor_cali_init
 #define RC_MIN_VALUE 1000
-#define RC_MAX_VALUE 2022 // 
+#define RC_MAX_VALUE 2000 //2022 // 
 #define RC_ROLL_ID 0
 #define RC_PITCH_ID 1
 #define RC_THR_ID 2
 #define RC_YAW_ID 3
 #define RC_AUX1_ID 4
 #define RC_AUX2_ID 5
-uint32_t rc_revert_mask = 0|1<<RC_PITCH_ID|1<<RC_ROLL_ID; // 
+uint32_t rc_revert_mask = 0;//|1<<RC_PITCH_ID|1<<RC_ROLL_ID; // 
 uint16_t rc_user_range[RC_MAX_COUNT][2]=
 {// if any vale==0, no userful
 	{0,0},
@@ -497,19 +534,19 @@ void do_rc_config( mavlink_message_t * msg)
 	if( packet.time_boot_ms == BASE_CONFIG_ID){
 		id = packet.chan1_raw;
 		if( id < 0 || id >= RC_MAX_COUNT){
-			log("do_rc_config: id is no fix\n");
+			log("do_rc_config: id is no fix\r\n");
 			return;
 		}
-		log("do_rc_config: id=%d\n",id);
+		log("do_rc_config: id=%d\r\n",id);
 		//-----------  curve 
 		curve_paramk = packet.chan2_raw;
 		curve_type = packet.chan3_raw;
 		if( curve_paramk >= -100 && curve_paramk <= 100 ){
-			log("set curve_paramk=%d\n",curve_paramk);
+			log("set curve_paramk=%d\r\n",curve_paramk);
 			rc_user_cuver[id][0] = curve_paramk;
 		}
 		if( curve_type == 0 || curve_type == 1 ){
-			log("set curve_type=%d\n",curve_type);
+			log("set curve_type=%d\r\n",curve_type);
 			rc_user_cuver[id][1] = curve_type;
 		}
 		//-------------- MIN MAX
@@ -523,62 +560,65 @@ void do_rc_config( mavlink_message_t * msg)
 		if( min != 0 && max != 0 ){
 			rc_user_range[id][0]=min;
 			rc_user_range[id][1] = max;
-			log("set min=%d,max=%d\n",min,max);
+			log("set min=%d,max=%d\r\n",min,max);
 		}
 		//-------------- trim
 		trim = packet.chan6_raw;
 		if( trim >= -200 && trim <= 200 ){
 			rc_user_trim[id] = trim;
-			log("set trim=%d\n",trim);
+			log("set trim=%d\r\n",trim);
 		}
 		//--------------- revert
 		revert = packet.chan7_raw;
 		if( revert == 1 ){
 			rc_revert_mask |= 1<<id;
-			log("set revert=%d\n",revert);
+			log("set revert=%d\r\n",revert);
+		}else{
+			rc_revert_mask &= ~(1<<id);
+			log("set revert=%d\r\n",revert);
 		}
 	}else if(packet.time_boot_ms == MIX_CONFIG_ID){
 		rc_mix = get_empty_rc_mix();
 		if( rc_mix == NULL ) {
-			log("no empty mix for new one\n");
+			log("no empty mix for new one\r\n");
 			return;
 		}
 		//main id
 		tmp = packet.chan1_raw;
 		if( tmp < 0 || tmp >= RC_MAX_COUNT){
-			log("bad mix maind id\n");
+			log("bad mix maind id\r\n");
 			return;
 		}
 		rc_mix->main_id = tmp;
-		log("mix main id=%d\n",tmp);
+		log("mix main id=%d\r\n",tmp);
 		//slave_id
 		tmp = packet.chan2_raw;
 		if( tmp < 0 || tmp >= RC_MAX_COUNT ){
-			log("bad mix slave id\n");
+			log("bad mix slave id\r\n");
 			return;
 		}
 		rc_mix->slave_id = tmp;
-		log("mix slave id=%d\n",tmp);
+		log("mix slave id=%d\r\n",tmp);
 		//start position
 		tmp = packet.chan3_raw;
 		rc_mix->start_position = tmp;
-		log("mix start position=%d\n",tmp);
+		log("mix start position=%d\r\n",tmp);
 		//add_persen
 		tmp = packet.chan4_raw;
 		if( tmp < -100 || tmp > 100 ){
-			log("bad mix add persen=%d\n",tmp);
+			log("bad mix add persen=%d\r\n",tmp);
 			return;
 		}
 		rc_mix->add_persen = tmp/100;
-		log("mix add persen=%f\n",rc_mix->add_persen);
+		log("mix add persen=%f\r\n",rc_mix->add_persen);
 		//sub_persen
 		tmp = packet.chan5_raw;
 		if( tmp < -100 || tmp > 100 ){
-			log("bad mix sub persen=%d\n",tmp);
+			log("bad mix sub persen=%d\r\n",tmp);
 			return;
 		}
 		rc_mix->sub_persen = tmp/100;
-		log("mix sub persen=%f\n",rc_mix->sub_persen);
+		log("mix sub persen=%f\r\n",rc_mix->sub_persen);
 
 		rc_mix->valiable = 1;
 	}
@@ -588,24 +628,43 @@ inline uint16_t get_adc(int id)
 	//return id<NB_ADC ? (buf_adc[id].sum / ADC_NB_SAMPLES) : RC_MAX_VALUE ;
 	return (buf_adc[id].sum / ADC_NB_SAMPLES);
 }
-uint16_t get_rc(int id){ 
-	if( id >=0 && id < RC_MAX_COUNT )
-		return rc_value_list[id];
-	return RC_MIN_VALUE;
-}
+
 inline uint16_t get_rc_raw(int id)
 {// return 0~RC_RANGE_VALUE
-	int range;
+	float range;
+	float tmp;
+	uint16_t adc;
 	if( id < NB_ADC ){
 		range= get_adc(id)-adc_sensor_range[id][ADC_MIN_ID];
 		if( range < 0 ) range = 0;
 		range= RC_RANGE_VALUE*range;
 		range = range/adc_sensor_range[id][ADC_RANGE_ID];
-		if( range >= 0x3ff ) range = RC_RANGE_VALUE;
+		if( range > RC_RANGE_VALUE ) range = RC_RANGE_VALUE;
+		/*
+		adc = get_adc(id);
+		if( adc > adc_sensor_range[id][ADC_MAX_ID] ) adc = adc_sensor_range[id][ADC_MAX_ID];
+		if( adc < adc_sensor_range[id][ADC_MIN_ID] ) adc = adc_sensor_range[id][ADC_MIN_ID];
+
+		if( adc > adc_sensor_range[id][ADC_MIDDLE_ID] ){
+			tmp = adc - adc_sensor_range[id][ADC_MIDDLE_ID];
+			tmp = tmp * adc_sensor_again[id][1];
+			tmp += 500;
+		}else{
+			tmp = adc;
+			tmp = tmp * adc_sensor_again[id][0];
+		}
+		range = tmp;
+		*/
 	}else{
-		range = 0;
+		range = 10;
 	}
 	return (uint16_t)range;
+}
+
+uint16_t get_rc(int id){ 
+	if( id >=0 && id < RC_MAX_COUNT )
+		return rc_value_list[id];
+	return RC_MIN_VALUE;
 }
 inline uint16_t user_revert_rc_raw(int id, uint16_t rc)
 {
@@ -624,24 +683,30 @@ inline uint16_t user_curve_rc_raw(int id, uint16_t rc){
 		return rc;
 	
 	if( type == 0){
-		return expo(rc,paramk);
+		tmp = expo(rc,paramk);
 	}else{
 		tmp = (rc<<1) - RC_RANGE_VALUE;// 2*(rc-1022/2) 
 		tmp = expo(tmp,paramk);
 
 		tmp += RC_RANGE_VALUE; // tmp/2+1022/2
 		tmp = tmp >> 1;
-		return tmp;
 	}
+	if( tmp > RC_RANGE_VALUE ) tmp = RC_RANGE_VALUE;
+	if( tmp < 0) tmp = 0;
+	return (uint16_t)tmp;
 
 }
 uint16_t user_zoom_rc(int id, uint16_t rc_raw){
-	uint16_t min,max,rang,rc_z;
+	uint16_t min,max,rc_z;
+	float rang;
+	float tmp;
 	min = rc_user_range[id][0];
 	max = rc_user_range[id][1];
 	if( min != 0 && max != 0 ){
 		rang= max-min;
-		rc_z = min+ rc_raw * ( rang/RC_RANGE_VALUE );
+		tmp = rang/RC_RANGE_VALUE;
+		tmp = tmp * rc_raw;
+		rc_z = min+tmp;//rc_raw * ( rang/RC_RANGE_VALUE );
 		//if( rc_z < RC_MIN_VALUE ) rc_z = RC_MIN_VALUE;
 		if( rc_z > RC_MAX_VALUE ) rc_z = RC_MAX_VALUE;
 		return rc_z;
@@ -707,16 +772,27 @@ void update_rc()
 	for( i=0; i< RC_MAX_COUNT; i++){
 		rc = get_rc_raw(i);	
 		rc = user_revert_rc_raw(i,rc);
-		rc = user_curve_rc_raw(i,rc);
+		//rc = user_curve_rc_raw(i,rc);
 		rc_value_list[i] = user_zoom_rc(i,rc);
 	}
-	cail_user_mix_rc();
-	cail_user_trim_rc();
+	//cail_user_mix_rc();
+	//cail_user_trim_rc();
 }
 
 
-#define get_rc_for_mavlink(id) ( RC_MIN_VALUE + get_rc(id) )
-#define get_rc_for_reciver(id) get_rc(id)
+#define get_rc_for_mavlink(id) get_rc(id)
+uint16_t get_rc_for_reciver(id)
+{
+	uint16_t rc = get_rc(id);
+	
+	if( rc < RC_RANGE_VALUE ){
+		return 0;
+	}else if( rc > RC_MAX_VALUE ){
+		return RC_RANGE_VALUE;
+	}else{
+		return (rc - RC_RANGE_VALUE);
+	}
+}
 
 
 
@@ -956,8 +1032,8 @@ delay_ms(10);
 #ifdef ZFRAME_SENDER
 
 //################################################ zframe sender
-#define zframeSenderUart &uart3
-#define userUart &uart1
+#define zframeSenderUart &uart2
+#define configUart &uart3
 unsigned long zframe_reciver_success_count=0; //the reciver's success count
 unsigned long zframe_reciver_decode_false_count=0;//the reciver's false count
 unsigned long zframe_reciver_send_count=0; // the reciver's send count
@@ -982,9 +1058,12 @@ void display_status()
 	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count);
 	//log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
 }
+
+uint8_t mavlink_buffer[MAVLINK_MAX_PACKET_LEN];
 void send_rc_to_user()
 {
 	int id=0;
+	int len;
 	mavlink_message_t msg;
 	mavlink_rc_channels_override_t packet;
 
@@ -995,11 +1074,13 @@ void send_rc_to_user()
 	packet.chan3_raw= get_rc_for_mavlink(id++);
 	packet.chan4_raw= get_rc_for_mavlink(id++);
 	packet.chan5_raw= get_rc_for_mavlink(id++);
-	packet.chan5_raw= get_rc_for_mavlink(id++);
+	packet.chan6_raw= get_rc_for_mavlink(id++);
 	packet.chan7_raw= get_rc_for_mavlink(id++);
 	packet.chan8_raw= get_rc_for_mavlink(id++);
 
 	mavlink_msg_rc_channels_override_encode(255, 109,  &msg, &packet);
+	len = mavlink_msg_to_send_buffer(mavlink_buffer, &msg);
+	send_data_by_uart(configUart,mavlink_buffer,len);
 }
 void handle_zframe_packet_frome_reciver(uint8_t *data)
 {
@@ -1033,6 +1114,22 @@ void listen_reciver_by_uart(struct uart_periph *uarts)
 	}
 }
 
+void jostick_led_init()
+{
+        gpio_set_mode(LED_STATUS_GPIO_BANK, GPIO_MODE_OUTPUT_2_MHZ,
+                      GPIO_CNF_OUTPUT_PUSHPULL,  LED_STATUS_GPIO);
+        gpio_clear(LED_STATUS_GPIO_BANK, LED_STATUS_GPIO);
+}
+inline void jostick_led_on(){
+        gpio_set(LED_STATUS_GPIO_BANK, LED_STATUS_GPIO);
+}
+inline void jostick_led_off(){
+        gpio_clear(LED_STATUS_GPIO_BANK, LED_STATUS_GPIO);
+}
+inline void jostick_led_toggle(){
+        gpio_toggle(LED_STATUS_GPIO_BANK, LED_STATUS_GPIO);
+}
+
 void zframe_sender_setup()
 {
 	adc_init();
@@ -1056,31 +1153,54 @@ void zframe_sender_setup()
 #endif
 
 	//57600: 1/150  115200: 1/500 2250000: 1000
-	sendrc_tid = sys_time_register_timer(1.0/150,NULL);	
+	sendrc_tid = sys_time_register_timer(1.0/100,NULL);	
 	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
-	status_tid =sys_time_register_timer(4.5,NULL);		
-	//view_rc_tid =sys_time_register_timer(1.0/200,NULL);		
+	status_tid =sys_time_register_timer(1.0,NULL);		
+	view_rc_tid =sys_time_register_timer(1.0/20,NULL);		
 
 	mcu_int_enable();
 
+	adc_sensor_cali_init();
+
 	init_rc_mix_list();
+
+	jostick_led_init();
 }
 
 void zframe_sender_loop()
 {
+	static float t1,t2;
 	//if(uart_check_free_space(zframeSenderUart,ZFRAME_BUFF_SIZE)) 
 		//send_rc_to_reciver_by_uart();
-	listen_reciver_by_uart(zframeSenderUart);
 
-	if( sys_time_check_and_ack_timer(status_tid) )
+	//listen_reciver_by_uart(zframeSenderUart);
+	do_copy_uart_and_handle_mavlink_msg(configUart,NULL);
+
+	if( sys_time_check_and_ack_timer(status_tid) ){
 		display_status();
+	}
 	
 	if( sys_time_check_and_ack_timer(sendrc_tid) ){
+		//t1 = get_sys_time_float();
 		update_rc();
 		send_rc_to_reciver_by_uart();
+		//t2 = get_sys_time_float();
+		//log("send time : %f\r\n",t1-t2);
+		/*
+		for( i=0; i< RC_MAX_COUNT; i++)
+			log("%d,",get_adc(i));
+		log("\r\n");
+		*/
 	}
-	//if( sys_time_check_and_ack_timer(view_rc_tid) )
-	//	send_rc_to_user();
+
+	if( sys_time_check_and_ack_timer(view_rc_tid) ){
+		send_rc_to_user();
+		jostick_led_toggle();
+	}
+/*
+	do_copy_uart_data_to_other_uart(zframeSenderUart,userUart);
+	do_copy_uart_data_to_other_uart(userUart, zframeSenderUart);
+*/	
 }
 //################################################ zframe sender
 
