@@ -145,16 +145,16 @@ int expo(int x, int k)
 {
   if (k == 0) return x;
   int y;
-  int neg = (x < 0);
+  int neg = (x < 0)?1:0;
 
-  if (neg) x = -x;
+  if (neg==1) x = -x;
   if (k<0) {
     y = RESXu-expou(RESXu-x, -k);
   }
   else {
     y = expou(x, k);
   }
-  return neg? -y : y;
+  return neg==1? -y : y;
 }
 //**************************************************************** curve expo
 
@@ -483,8 +483,11 @@ inline uint16_t get_rc_max_value(int id){
 		return rc_user_range[id][1];
 	return RC_MAX_VALUE;
 }
+
+#define CURVE_THR_TYPE 1
+#define CURVE_MIDDLE_TYPE 2
 short rc_user_cuver[RC_MAX_COUNT][2]={
-	//[paramk[-100~100],type[0 thr,1 middle]
+	//[paramk[-100~100],type[1 thr,2 middle]
 	{0,0},
 	{0,0},
 	{0,0},
@@ -524,7 +527,8 @@ rc_mix_type *get_empty_rc_mix()
 void do_rc_config( mavlink_message_t * msg)
 {
 	mavlink_rc_channels_t packet;
-	int id,curve_paramk,curve_type,min,max,trim,revert;
+	int id,curve_type,min,max,trim,revert;
+	short curve_paramk;
 	short tmp;
 	rc_mix_type *rc_mix;
 
@@ -541,11 +545,12 @@ void do_rc_config( mavlink_message_t * msg)
 		//-----------  curve 
 		curve_paramk = packet.chan2_raw;
 		curve_type = packet.chan3_raw;
+		//log("get curve_paramk=%d\r\n",curve_paramk);
 		if( curve_paramk >= -100 && curve_paramk <= 100 ){
 			log("set curve_paramk=%d\r\n",curve_paramk);
 			rc_user_cuver[id][0] = curve_paramk;
 		}
-		if( curve_type == 0 || curve_type == 1 ){
+		if( curve_type == CURVE_THR_TYPE || curve_type == CURVE_MIDDLE_TYPE ){
 			log("set curve_type=%d\r\n",curve_type);
 			rc_user_cuver[id][1] = curve_type;
 		}
@@ -682,7 +687,7 @@ inline uint16_t user_curve_rc_raw(int id, uint16_t rc){
 	if( paramk == 0 )
 		return rc;
 	
-	if( type == 0){
+	if( type == CURVE_THR_TYPE){
 		tmp = expo(rc,paramk);
 	}else{
 		tmp = (rc<<1) - RC_RANGE_VALUE;// 2*(rc-1022/2) 
@@ -772,7 +777,7 @@ void update_rc()
 	for( i=0; i< RC_MAX_COUNT; i++){
 		rc = get_rc_raw(i);	
 		rc = user_revert_rc_raw(i,rc);
-		//rc = user_curve_rc_raw(i,rc);
+		rc = user_curve_rc_raw(i,rc);
 		rc_value_list[i] = user_zoom_rc(i,rc);
 	}
 	//cail_user_mix_rc();
