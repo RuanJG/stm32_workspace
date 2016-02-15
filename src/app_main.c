@@ -1135,6 +1135,121 @@ inline void jostick_led_toggle(){
         gpio_toggle(LED_STATUS_GPIO_BANK, LED_STATUS_GPIO);
 }
 
+
+
+#if USE_HANDSET
+
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/exti.h>
+volatile static int handset_irq_counter = 0;
+volatile static uint16_t pin_status = 0; 
+uint16_t irq_error_count1 = 0; 
+uint16_t irq_error_count2 = 0; 
+uint16_t irq_error_count3 = 0; 
+uint16_t irq_error_count4 = 0; 
+
+void reset_handset_count()
+{
+	pin_status = gpio_port_read(GPIOB)& (GPIO4|GPIO5);
+	handset_irq_counter = 0;
+}
+void update_pin_status()
+{
+	uint16_t new_pins = gpio_port_read(GPIOB)& (GPIO4|GPIO5);
+	
+	uint16_t new_A = new_pins & GPIO4;
+	uint16_t new_B = new_pins & GPIO5;
+
+	uint16_t old_A = pin_status & GPIO4;
+	uint16_t old_B = pin_status & GPIO5;
+
+	if( old_A == new_A ){
+		if( new_A == 0 ){
+			if( new_B < old_B ){
+				handset_irq_counter++;
+			}else if( new_B > old_B ){
+				handset_irq_counter--;
+			}else{
+				irq_error_count1++;		
+			}
+		}else{
+			if( new_B > old_B ){
+				handset_irq_counter++;
+			}else if( new_B < old_B ){
+				handset_irq_counter--;
+			}else{
+				irq_error_count2++;		
+			}
+		}
+
+	}else{
+		if( old_B != new_B ) {
+			irq_error_count3++;
+		}else{
+			if( new_A < old_A ){
+				if( new_B > 0 )
+					handset_irq_counter++;
+				else
+					handset_irq_counter--;
+			}else if( new_A > old_A){
+				if( new_B > 0 )
+					handset_irq_counter--;
+				else
+					handset_irq_counter++;
+			}else{
+				irq_error_count4++;
+			}
+		}
+
+	}
+	pin_status = new_pins;
+	
+}
+void exti4_isr(void)
+{
+	update_pin_status();
+	exti_reset_request(EXTI4);
+}
+void exti9_5_isr(void)
+{
+	update_pin_status();
+	exti_reset_request(EXTI5);
+
+}
+static void handset_exti_setup(void)
+{
+	/* Enable GPIOA clock. */
+	rcc_periph_clock_enable(RCC_GPIOB);
+
+	/* Enable AFIO clock. */
+	rcc_periph_clock_enable(RCC_AFIO);
+
+	/* Enable EXTI0 interrupt. */
+	nvic_enable_irq(NVIC_EXTI4_IRQ);
+	nvic_enable_irq(NVIC_EXTI9_5_IRQ);
+
+	/* Set GPIO0 (in GPIO port A) to 'input open-drain'. */
+	gpio_clear(GPIOB,GPIO4);
+	gpio_clear(GPIOB,GPIO5);
+	gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO4);//GPIO_CNF_INPUT_FLOAT //GPIO_CNF_INPUT_PULL_UPDOWN
+	gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO5);//GPIO_CNF_INPUT_FLOAT //GPIO_CNF_INPUT_PULL_UPDOWN
+
+	/* Configure the EXTI subsystem. */
+	exti_select_source(EXTI4, GPIOB);
+	exti_select_source(EXTI5, GPIOB);
+	//exti_direction = FALLING;
+	exti_set_trigger(EXTI4, EXTI_TRIGGER_BOTH);
+	exti_set_trigger(EXTI5, EXTI_TRIGGER_BOTH);
+	//exti_reset_request(EXTI5);
+	reset_handset_count();
+	exti_enable_request(EXTI4);
+	exti_enable_request(EXTI5);
+}
+
+#endif // USE_HANDSET
+
+
+
 void zframe_sender_setup()
 {
 	adc_init();
@@ -1170,6 +1285,10 @@ void zframe_sender_setup()
 	init_rc_mix_list();
 
 	jostick_led_init();
+
+#if USE_HANDSET
+	handset_exti_setup();
+#endif
 }
 
 void zframe_sender_loop()
@@ -1196,6 +1315,7 @@ void zframe_sender_loop()
 			log("%d,",get_adc(i));
 		log("\r\n");
 		*/
+		//log("handset_irq_counter=%d,pin=%x, %d,%d,%d,%d,\r\n",handset_irq_counter,pin_status,irq_error_count1,irq_error_count2,irq_error_count3,irq_error_count4);
 	}
 
 	if( sys_time_check_and_ack_timer(view_rc_tid) ){
