@@ -1153,7 +1153,7 @@ void reset_handset_count()
 	pin_status = gpio_port_read(GPIOB)& (GPIO4|GPIO5);
 	handset_irq_counter = 0;
 }
-void update_pin_status()
+void update_pin_status_AB_step_mode() // AB: 00->10->11->01 -> 00 -> 10 ....  
 {
 	uint16_t new_pins = gpio_port_read(GPIOB)& (GPIO4|GPIO5);
 	
@@ -1205,14 +1205,39 @@ void update_pin_status()
 	pin_status = new_pins;
 	
 }
+
+void update_pin_status()
+{
+	uint16_t new_pins = gpio_port_read(GPIOB)& (GPIO4|GPIO5);
+	
+	uint16_t new_A = new_pins & GPIO4;
+	uint16_t new_B = new_pins & GPIO5;
+
+	uint16_t old_A = pin_status & GPIO4;
+	uint16_t old_B = pin_status & GPIO5;
+
+	if( new_pins == pin_status ) return ;
+	
+	if( new_pins == 0 ){
+		if( (pin_status&GPIO4) != 0 ){//gpio4 is fall , the direct is left/right
+			handset_irq_counter++;
+		}else if( (pin_status&GPIO5) != 0){
+			handset_irq_counter--;
+		}
+	}
+	pin_status = new_pins;
+}
+
 void exti4_isr(void)
 {
 	update_pin_status();
+	//log ("4= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
 	exti_reset_request(EXTI4);
 }
 void exti9_5_isr(void)
 {
 	update_pin_status();
+	//log ("5= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
 	exti_reset_request(EXTI5);
 
 }
@@ -1238,8 +1263,8 @@ static void handset_exti_setup(void)
 	exti_select_source(EXTI4, GPIOB);
 	exti_select_source(EXTI5, GPIOB);
 	//exti_direction = FALLING;
-	exti_set_trigger(EXTI4, EXTI_TRIGGER_BOTH);
-	exti_set_trigger(EXTI5, EXTI_TRIGGER_BOTH);
+	exti_set_trigger(EXTI4, EXTI_TRIGGER_FALLING);//EXTI_TRIGGER_BOTH);
+	exti_set_trigger(EXTI5, EXTI_TRIGGER_FALLING);
 	//exti_reset_request(EXTI5);
 	reset_handset_count();
 	exti_enable_request(EXTI4);
@@ -1276,7 +1301,7 @@ void zframe_sender_setup()
 	sendrc_tid = sys_time_register_timer(1.0/100,NULL);	
 	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
 	status_tid =sys_time_register_timer(1.0,NULL);		
-	view_rc_tid =sys_time_register_timer(1.0/20,NULL);		
+	view_rc_tid =sys_time_register_timer(1.0/50,NULL);		
 
 	mcu_int_enable();
 
@@ -1307,14 +1332,22 @@ void zframe_sender_loop()
 	if( sys_time_check_and_ack_timer(sendrc_tid) ){
 		//t1 = get_sys_time_float();
 		update_rc();
+		#if USE_HANDSET
+		rc_value_list[RC_THR_ID] = RC_MIN_VALUE + handset_irq_counter*10;
+		if( rc_value_list[RC_THR_ID] < RC_MIN_VALUE ) rc_value_list[RC_THR_ID]=RC_MIN_VALUE;
+		if( rc_value_list[RC_THR_ID] > RC_MAX_VALUE ) rc_value_list[RC_THR_ID]=RC_MAX_VALUE;
+		#endif
 		send_rc_to_reciver_by_uart();
 		//t2 = get_sys_time_float();
 		//log("send time : %f\r\n",t1-t2);
+		
 		/*
-		for( i=0; i< RC_MAX_COUNT; i++)
-			log("%d,",get_adc(i));
+		for( int i=0; i< RC_MAX_COUNT; i++)
+			//log("%d,",get_adc(i));
+			log("%d,",get_rc(i));
 		log("\r\n");
 		*/
+	
 		//log("handset_irq_counter=%d,pin=%x, %d,%d,%d,%d,\r\n",handset_irq_counter,pin_status,irq_error_count1,irq_error_count2,irq_error_count3,irq_error_count4);
 	}
 
