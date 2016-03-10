@@ -9,6 +9,8 @@
 #include <libopencm3/stm32/timer.h>
 #include <subsystems/actuators/actuators_pwm_arch.h>
 
+#include "simple_usb_serial.h"
+
 #define COPTER_UART &uart1
 #define TELEM_UART &uart3
 #define REMOTE_4G_UART &uart2
@@ -1273,7 +1275,17 @@ static void handset_exti_setup(void)
 
 #endif // USE_HANDSET
 
-
+void do_usb_serial_echo()
+{
+	uint8_t buffer[129];
+	int len;
+	len = simple_usb_serial_read(buffer,128);
+	buffer[len]=0;
+	if( len > 0 ){
+		log("get usb serial: %s\r\n",buffer);
+		simple_usb_serial_write_block(buffer, len);
+	}
+}
 
 void zframe_sender_setup()
 {
@@ -1354,6 +1366,7 @@ void zframe_sender_loop()
 	if( sys_time_check_and_ack_timer(view_rc_tid) ){
 		send_rc_to_user();
 		jostick_led_toggle();
+		do_usb_serial_echo();
 	}
 /*
 	do_copy_uart_data_to_other_uart(zframeSenderUart,userUart);
@@ -1363,6 +1376,7 @@ void zframe_sender_loop()
 //################################################ zframe sender
 
 #endif// ZFRAME_SENDER
+
 
 
 
@@ -1394,6 +1408,10 @@ inline void setup()
 #ifdef ZFRAME_RECIVER
 	zframe_reciver_setup();
 #endif
+
+#if USE_SIMPLE_USB_SERIAL
+	simple_usb_serial_init();
+#endif
 }
 
 inline void loop()
@@ -1415,6 +1433,9 @@ inline void loop()
 	log("\n\r");
 	delay_ms(100);
 
+#endif
+#if USE_SIMPLE_USB_SERIAL
+	simple_usb_serial_event();
 #endif
 }
 
