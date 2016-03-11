@@ -1063,6 +1063,7 @@ void send_rc_to_reciver_by_uart()
 void display_status()
 {
 	log("zframe send %d packet;  recived ok %d, decode err %d\n\r",zframe_send_packet_count,zframe_reciver_success_count,zframe_reciver_decode_false_count);
+	log("usb serial write waite count =%d\r\n",write_wait_count);
 	//log("zframe reciver send %d, recive ok %d, decode err %d, \n\r",zframe_reciver_send_count,zframe_sender_recive_packet_success_count,zframe_sender_recive_packet_false_count);
 }
 
@@ -1313,7 +1314,7 @@ void zframe_sender_setup()
 	sendrc_tid = sys_time_register_timer(1.0/100,NULL);	
 	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
 	status_tid =sys_time_register_timer(1.0,NULL);		
-	view_rc_tid =sys_time_register_timer(1.0/50,NULL);		
+	view_rc_tid =sys_time_register_timer(1.0/40,NULL);		
 
 	mcu_int_enable();
 
@@ -1366,7 +1367,7 @@ void zframe_sender_loop()
 	if( sys_time_check_and_ack_timer(view_rc_tid) ){
 		send_rc_to_user();
 		jostick_led_toggle();
-		do_usb_serial_echo();
+		//do_usb_serial_echo();
 	}
 /*
 	do_copy_uart_data_to_other_uart(zframeSenderUart,userUart);

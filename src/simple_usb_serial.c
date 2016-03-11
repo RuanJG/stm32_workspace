@@ -355,6 +355,8 @@ int simple_usb_serial_read(uint8_t *buff,int maxlen)
 	}
 	return i;
 }
+
+unsigned int write_wait_count = 0;
 //write block , return real write len 
 int simple_usb_serial_write_block(uint8_t *buff,int len)
 {
@@ -371,6 +373,7 @@ int simple_usb_serial_write_block(uint8_t *buff,int len)
 
     		res = usbd_ep_write_packet(usbd_dev, 0x82, &buff[i], datalen);
 		if( res == 0 ){// tx status is busy, wait and retry;
+			write_wait_count++;
 			;// translate busy,delay
 		}
 		i+= res;
@@ -378,12 +381,12 @@ int simple_usb_serial_write_block(uint8_t *buff,int len)
 	return i;
 }
 int simple_usb_serial_write_push()
-{
+{//write from fifo buff
 	
 }
 //write unsync, return real write len , or return -1
 int simple_usb_serial_write(uint8_t *buff,int len)
-{
+{//write to fifo buffer
 	
 }
 void simple_usb_serial_event()
