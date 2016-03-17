@@ -11,6 +11,11 @@
 
 #include "simple_usb_serial.h"
 
+#if USE_I2C0 || USE_I2C1 || USE_I2C2 || USE_I2C3
+#define USING_I2C 1
+#include "mcu_periph/i2c.h"
+#endif
+
 #define COPTER_UART &uart1
 #define TELEM_UART &uart3
 #define REMOTE_4G_UART &uart2
@@ -820,8 +825,7 @@ typedef struct _zframe_packet{
 }zframe_packet_t;
 
 #define ZFRAME_UART_BUFF_SIZE 1024
-#define ZFRAME_SENDER
-//#define ZFRAME_RECIVER
+
 void do_dead(char *last_string)
 {
 	log("system Dead: %s\n\r",last_string);
@@ -1288,6 +1292,65 @@ void do_usb_serial_echo()
 	}
 }
 
+
+
+#include "peripherals/mpu60x0_i2c.h" 
+#define IMU_MPU60X0_ACCEL_RANGE MPU60X0_ACCEL_RANGE_16G
+#define IMU_MPU60X0_GYRO_RANGE MPU60X0_GYRO_RANGE_2000
+
+/* Accelerometer: Bandwidth 44Hz, Delay 4.9ms
+ * Gyroscope: Bandwidth 42Hz, Delay 4.8ms sampling 1kHz
+ */
+#define IMU_MPU60X0_LOWPASS_FILTER MPU60X0_DLPF_42HZ
+#define IMU_MPU60X0_SMPLRT_DIV 9
+ /* Accelerometer: Bandwidth 260Hz, Delay 0ms
+ * Gyroscope: Bandwidth 256Hz, Delay 0.98ms sampling 8kHz
+
+#define IMU_MPU60X0_LOWPASS_FILTER MPU60X0_DLPF_256HZ
+#define IMU_MPU60X0_SMPLRT_DIV 3
+ */
+struct Mpu60x0_I2c mpu;
+void imu_impl_init(void)
+{
+  mpu60x0_i2c_init(&mpu, &i2c1, MPU60X0_ADDR);
+  // change the default configuration
+  mpu.config.smplrt_div = IMU_MPU60X0_SMPLRT_DIV;
+  mpu.config.dlpf_cfg = IMU_MPU60X0_LOWPASS_FILTER;
+  mpu.config.gyro_range = IMU_MPU60X0_GYRO_RANGE;
+  mpu.config.accel_range = IMU_MPU60X0_ACCEL_RANGE;
+}
+
+void imu_periodic(void)
+{
+  mpu60x0_i2c_periodic(&mpu);
+}
+
+void imu_mpu_i2c_event(void)
+{
+  uint32_t now_ts = get_sys_time_usec();
+
+  // If the MPU60X0 I2C transaction has succeeded: convert the data
+  mpu60x0_i2c_event(&mpu);
+  if (mpu.data_available) {
+    //RATES_COPY(imu.gyro_unscaled, mpu.data_rates.rates);
+    //VECT3_COPY(imu.accel_unscaled, mpu.data_accel.vect);
+    mpu.data_available = FALSE;
+    //imu_scale_gyro(&imu);
+    //imu_scale_accel(&imu);
+    //AbiSendMsgIMU_GYRO_INT32(IMU_MPU60X0_ID, now_ts, &imu.gyro);
+    //AbiSendMsgIMU_ACCEL_INT32(IMU_MPU60X0_ID, now_ts, &imu.accel);
+  }
+}
+
+void imu_data_log()
+{
+	log("imu:%d,%d,%d  rate:%d,%d,%d\r\n",mpu.data_accel.vect.x,mpu.data_accel.vect.y, mpu.data_accel.vect.z, mpu.data_rates.rates.p,mpu.data_rates.rates.q,
+        mpu.data_rates.rates.r);
+}
+
+
+
+
 void zframe_sender_setup()
 {
 	adc_init();
@@ -1340,6 +1403,9 @@ void zframe_sender_loop()
 
 	if( sys_time_check_and_ack_timer(status_tid) ){
 		display_status();
+#if USE_IMU60x0
+		imu_data_log();
+#endif
 	}
 	
 	if( sys_time_check_and_ack_timer(sendrc_tid) ){
@@ -1365,6 +1431,9 @@ void zframe_sender_loop()
 	}
 
 	if( sys_time_check_and_ack_timer(view_rc_tid) ){
+#if USE_IMU60x0
+		imu_periodic();
+#endif
 		send_rc_to_user();
 		jostick_led_toggle();
 		//do_usb_serial_echo();
@@ -1377,8 +1446,6 @@ void zframe_sender_loop()
 //################################################ zframe sender
 
 #endif// ZFRAME_SENDER
-
-
 
 
 
@@ -1402,6 +1469,9 @@ inline void setup()
 #if USE_UART3
 	uart3_init();
 #endif
+#ifdef USE_I2C1
+	i2c1_init();
+#endif
 
 #ifdef ZFRAME_SENDER
 	zframe_sender_setup();
@@ -1412,6 +1482,10 @@ inline void setup()
 
 #if USE_SIMPLE_USB_SERIAL
 	simple_usb_serial_init();
+#endif
+
+#if USE_IMU60x0
+	imu_impl_init();
 #endif
 }
 
@@ -1437,6 +1511,13 @@ inline void loop()
 #endif
 #if USE_SIMPLE_USB_SERIAL
 	simple_usb_serial_event();
+#endif
+#if USING_I2C
+	i2c_event();
+#endif
+
+#if USE_IMU60x0
+	imu_mpu_i2c_event();
 #endif
 }
 
