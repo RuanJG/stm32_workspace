@@ -62,6 +62,9 @@ AD1 : pc0 pc1 pc2 pc3 pc4 pc5
 Status LED : pb2
 
 handset interrupt : pb4(A) pb5(B)
+TIMER2_COUNTER_HANDSET : pb8 pb9
+
+
 
 board used: 
 A11 a12 a8

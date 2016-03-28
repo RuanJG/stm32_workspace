@@ -8,6 +8,8 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/timer.h>
 #include <subsystems/actuators/actuators_pwm_arch.h>
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/exti.h>
 
 #include "simple_usb_serial.h"
 
@@ -1146,8 +1148,6 @@ inline void jostick_led_toggle(){
 
 #if USE_HANDSET
 
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/stm32/exti.h>
 volatile static int handset_irq_counter = 0;
 volatile static uint16_t pin_status = 0; 
 uint16_t irq_error_count1 = 0; 
@@ -1325,6 +1325,10 @@ void imu_periodic(void)
   mpu60x0_i2c_periodic(&mpu);
 }
 
+int x0=0;
+int y0=0;
+int z0=0;
+uint8_t mpu_xyz_inited = 0;
 void imu_mpu_i2c_event(void)
 {
   uint32_t now_ts = get_sys_time_usec();
@@ -1332,6 +1336,12 @@ void imu_mpu_i2c_event(void)
   // If the MPU60X0 I2C transaction has succeeded: convert the data
   mpu60x0_i2c_event(&mpu);
   if (mpu.data_available) {
+	  if( mpu_xyz_inited == 0 ){
+		x0=mpu.data_accel.vect.x;
+		y0=mpu.data_accel.vect.y;
+		z0=mpu.data_accel.vect.z;
+		mpu_xyz_inited=1;
+	  }
     //RATES_COPY(imu.gyro_unscaled, mpu.data_rates.rates);
     //VECT3_COPY(imu.accel_unscaled, mpu.data_accel.vect);
     mpu.data_available = FALSE;
@@ -1344,9 +1354,201 @@ void imu_mpu_i2c_event(void)
 
 void imu_data_log()
 {
-	log("imu:%d,%d,%d  rate:%d,%d,%d\r\n",mpu.data_accel.vect.x,mpu.data_accel.vect.y, mpu.data_accel.vect.z, mpu.data_rates.rates.p,mpu.data_rates.rates.q,
-        mpu.data_rates.rates.r);
+	//log("imu:%d,%d,%d  rate:%d,%d,%d\r\n",mpu.data_accel.vect.x,mpu.data_accel.vect.y, mpu.data_accel.vect.z, mpu.data_rates.rates.p,mpu.data_rates.rates.q,mpu.data_rates.rates.r);
+
+	int x = mpu.data_accel.vect.x - x0;
+	int y = mpu.data_accel.vect.y - y0;
+	int z = mpu.data_accel.vect.z - z0;
+
+	log("x,y,z=%d,%d,%d\r\n",x,y,z);
+
+	x = 1500 + x/4; // 2000,-2000 -> 500,-500
+	y = 1500 + y/4; // 2000,-2000 -> 500,-500
+	log("x,y=%d,%d\r\n",x,y);
 }
+
+
+
+
+#if USE_TIMER4_COUNTER_HANDSET
+
+void timer_counter_setup(uint32_t timer,uint32_t period, uint32_t freq)
+{//period 1~65535 freq 0~65535
+	rcc_periph_clock_enable(RCC_GPIOB);
+	gpio_clear(GPIOB,GPIO8|GPIO9);
+	gpio_set_mode(GPIOB, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO8|GPIO9);//GPIO_CNF_INPUT_FLOAT //GPIO_CNF_INPUT_PULL_UPDOWN
+
+	// timer base setting
+	if( timer == TIM4 )
+        	rcc_periph_clock_enable(RCC_TIM4);
+  	timer_reset(timer);
+  	uint32_t timer_clk = timer_get_frequency(timer);
+	log("set timer counter clk=%d, period=%d, %d HZ\r\n",timer_clk,period,freq);
+	timer_set_prescaler(timer, (timer_clk/freq)-1);
+  	timer_disable_preload(timer);
+        timer_set_period(timer, period); //auto count
+	#if 0
+	timer_direction_up(timer);
+	timer_continuous_mode(timer);
+	timer_set_clock_division(timer,TIM_CR1_CKD_CK_INT); //sample clk = timer clk
+	#else
+	timer_set_mode(timer, TIM_CR1_CKD_CK_INT,TIM_CR1_CMS_EDGE, TIM_CR1_DIR_UP);
+	#endif
+	timer_update_on_overflow(timer);
+	timer_enable_update_event(timer);
+	timer_enable_irq(timer,TIM_DIER_UIE);
+
+	// timer Capture  setting
+        timer_ic_set_input(timer, TIM_IC3, TIM_IC_IN_TI3); //pa1
+	timer_ic_set_filter(timer, TIM_IC3, TIM_IC_OFF ); //no filter 
+	timer_ic_set_prescaler(timer, TIM_IC3 , TIM_IC_PSC_OFF) ; // no psc
+	TIM_CCER(timer) &= ~TIM_CCER_CC3P; //0 rise sign
+	timer_enable_irq(timer,TIM_DIER_CC3IE);
+	timer_ic_enable(timer,TIM_IC3);
+
+        timer_ic_set_input(timer, TIM_IC4, TIM_IC_IN_TI4); //pa2
+	timer_ic_set_filter(timer, TIM_IC4, TIM_IC_OFF ); //no filter 
+	timer_ic_set_prescaler(timer, TIM_IC4 , TIM_IC_PSC_OFF) ; // no psc
+	TIM_CCER(timer) &= ~TIM_CCER_CC4P; //0 rise sign
+	timer_enable_irq(timer,TIM_DIER_CC4IE);
+	timer_ic_enable(timer,TIM_IC4);
+	//timer_ic_disable(timer,TIM_IC1);
+	//timer_ic_disable(timer,TIM_IC4);
+
+	//start timer
+  	timer_enable_preload(timer);
+  	/* Counter enable. */
+	timer_enable_counter(timer);
+
+	nvic_enable_irq(NVIC_TIM4_IRQ);
+	/*
+        timer_slave_set_mode(TIM2, 0x3); // encoder
+        timer_ic_set_input(TIM2, TIM_IC1, TIM_IC_IN_TI1);
+        timer_ic_set_input(TIM2, TIM_IC2, TIM_IC_IN_TI2);
+ 	timer_slave_set_trigger(TIM2,TIM_SMCR_TS_ETRF);
+        timer_enable_counter(TIM2);
+	*/
+}
+volatile uint32_t trigger_weith = 0; //256 270 max 280
+volatile uint32_t trigger_times = 0;
+uint32_t triggerError_times = 0;
+volatile uint32_t timer_counter_again = 0;
+volatile uint32_t timer_counter = 0;
+volatile unsigned int trigger_pin_status= 0;
+#define TIM_COUNTER_PERIOD  60000 //60ms each timer update
+#define TIM_COUNTER_FREQ  1000000
+void tim4_isr(void){ // AB: A-B left B-A right
+	//timer_counter = timer_get_counter(TIM2);
+	uint32_t tc;
+
+	//log("tim2 irq %f\r\n",get_sys_time_float());
+	//log("sr=%x\r\n",TIM_SR(TIM2));
+	if ( timer_get_flag(TIM4, TIM_SR_UIF) ){
+		if( trigger_pin_status != 0 ){
+			timer_counter_again +=  TIM_COUNTER_PERIOD - timer_counter;
+			timer_counter = 0;
+			if( timer_counter_again > TIM_COUNTER_PERIOD ){// no control , no need count
+				timer_counter_again = 0;
+				timer_counter = 0; // no count;
+				trigger_pin_status = 0;
+				triggerError_times ++;
+				log("error %d\r\n",__LINE__);
+			}
+		}
+		//comment
+		else{
+			if( timer_counter != 0 && timer_counter_again != 0)
+				log("count=%d, count_again=%d,error %d\r\n",timer_counter,timer_counter_again,__LINE__);
+		}
+		//log("update cc=%d,%d\r\n",timer_counter,TIM_CCR2(TIM2));
+		//log("sr=%x\r\n",TIM_SR(TIM2));
+		//timer_clear_flag(TIM2,TIM_SR_UIF);
+	}
+	if( timer_get_flag(TIM4,TIM_SR_CC3IF) ){
+		//TODO need do nicely
+		if( timer_get_flag(TIM4,TIM_SR_UIF) ) 
+			tc = 0;
+		else
+			tc = TIM_CCR3(TIM4); //get count by this way , flag wil clear , use timer_get_counter will not ,but not very right
+
+
+		if( trigger_pin_status == 0 || trigger_pin_status == TIM_SR_CC3IF ){//new start or error , AB or BAAB  
+			//set new start
+			trigger_pin_status = TIM_SR_CC3IF; //the first sutep is A
+			timer_counter = tc;
+			//if( timer_counter == 0) timer_counter = 1;
+		}else{
+			timer_counter = timer_counter_again+ tc - timer_counter;
+			if( timer_counter < TIM_COUNTER_PERIOD && timer_counter > 0 ){
+				trigger_pin_status = 0;
+				trigger_times ++;
+				trigger_weith = timer_counter;
+				timer_counter = 0;
+				timer_counter_again = 0;
+			}else{
+				timer_counter_again = 0;
+				timer_counter = 0; // no count;
+				trigger_pin_status = 0;
+				triggerError_times ++;
+				log("error %d\r\n",__LINE__);
+			}
+		}
+		/*
+		trigger_weith = timer_counter_again + tc;
+		trigger_times ++;
+		timer_counter=tc;
+		timer_counter_again = 0;
+		*/
+		//log("cc=%d,%d\r\n",timer_counter,TIM_CCR2(TIM2));
+		//log("sr=%x\r\n",TIM_SR(TIM2));
+	}
+	if( timer_get_flag(TIM4,TIM_SR_CC4IF) ){
+		if( timer_get_flag(TIM4,TIM_SR_UIF) ) 
+			tc = 0;
+		else
+			tc = TIM_CCR4(TIM4); //get count by this way , flag wil clear , use timer_get_counter will not ,but not very right
+
+
+		if( trigger_pin_status == 0 || trigger_pin_status == TIM_SR_CC4IF ){//new start or error ,  BA or ABBA
+			//set new start
+			trigger_pin_status = TIM_SR_CC4IF; //the first sutep is A
+			timer_counter = tc;
+			//if( timer_counter == 0) timer_counter = 1;
+		}else{
+			timer_counter = timer_counter_again+ tc - timer_counter;
+			if( timer_counter < TIM_COUNTER_PERIOD && timer_counter > 0 ){
+				trigger_pin_status = 0;
+				trigger_times --;
+				trigger_weith = timer_counter;
+				timer_counter = 0;
+				timer_counter_again = 0;
+			}else{
+				timer_counter_again = 0;
+				timer_counter = 0; // no count;
+				trigger_pin_status = 0;
+				triggerError_times ++;
+				log("error %d\r\n",__LINE__);
+			}
+		}
+		//log("cc=%d,%d\r\n",timer_counter,TIM_CCR2(TIM2));
+		//log("sr=%x\r\n",TIM_SR(TIM2));
+	}
+
+	timer_clear_flag(TIM4,TIM_SR_CC4IF|TIM_SR_UIF | TIM_SR_CC3IF);
+
+	{
+		/*
+		log("x\r\n");
+		log("cc=%d,%d\r\n",timer_counter,TIM_CCR2(TIM2));
+		log("sr=%x,dier=%x\r\n",TIM_SR(TIM2),TIM_DIER(TIM2));
+		timer_clear_flag(TIM2,0xffff);
+		//nvic_disable_irq(NVIC_TIM2_IRQ);
+		*/
+	}
+}
+
+#endif //USE_TIMER4_COUNTER_HANDSET
+
 
 
 
@@ -1403,9 +1605,6 @@ void zframe_sender_loop()
 
 	if( sys_time_check_and_ack_timer(status_tid) ){
 		display_status();
-#if USE_IMU60x0
-		imu_data_log();
-#endif
 	}
 	
 	if( sys_time_check_and_ack_timer(sendrc_tid) ){
@@ -1436,6 +1635,12 @@ void zframe_sender_loop()
 #endif
 		send_rc_to_user();
 		jostick_led_toggle();
+	#if USE_TIMER4_COUNTER_HANDSET
+		log("weith=%d,,times=%d, error=%d\r\n",trigger_weith,trigger_times,triggerError_times);
+	#endif
+	#if USE_IMU60x0
+		imu_data_log();
+	#endif
 		//do_usb_serial_echo();
 	}
 /*
@@ -1486,6 +1691,10 @@ inline void setup()
 
 #if USE_IMU60x0
 	imu_impl_init();
+#endif
+
+#if USE_TIMER4_COUNTER_HANDSET
+	timer_counter_setup(TIM4, TIM_COUNTER_PERIOD, TIM_COUNTER_FREQ);// echo tick 1/1000000 s, 60ms one round
 #endif
 }
 
