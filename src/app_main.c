@@ -353,10 +353,18 @@ void do_copy_uart_and_handle_mavlink_msg(struct uart_periph *uarts ,struct uart_
 	uint8_t buff[UART_RX_BUFFER_SIZE];
 	uint16_t rcs[8];
 
+#if ZFRAME_SENDER_USE_USB_CDCAM_CONFIG_UART
+	data_len = simple_usb_serial_read(buff , UART_RX_BUFFER_SIZE );
+#else
 	data_len = uart_char_available(uarts);
+#endif
 	if( data_len > 0 ){
+	#if ZFRAME_SENDER_USE_USB_CDCAM_CONFIG_UART
+		;
+	#else
 		for( i = 0 ; i< data_len; i++)
 			buff[i] = uart_getch(uarts);
+	#endif
 	
 		for( i = 0 ; i< data_len && uartd != NULL; i++)
 			uart_put_byte(uartd, buff[i] );
@@ -1094,7 +1102,13 @@ void send_rc_to_user()
 
 	mavlink_msg_rc_channels_override_encode(255, 109,  &msg, &packet);
 	len = mavlink_msg_to_send_buffer(mavlink_buffer, &msg);
+#if ZFRAME_SENDER_USE_USB_CDCAM_CONFIG_UART
+	#if USE_SIMPLE_USB_SERIAL
+	simple_usb_serial_write_block(mavlink_buffer,len);
+	#endif
+#else
 	send_data_by_uart(configUart,mavlink_buffer,len);
+#endif
 }
 void handle_zframe_packet_frome_reciver(uint8_t *data)
 {
@@ -1601,6 +1615,7 @@ void zframe_sender_loop()
 		//send_rc_to_reciver_by_uart();
 
 	//listen_reciver_by_uart(zframeSenderUart);
+
 	do_copy_uart_and_handle_mavlink_msg(configUart,NULL);
 
 	if( sys_time_check_and_ack_timer(status_tid) ){
