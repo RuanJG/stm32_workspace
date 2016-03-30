@@ -1711,7 +1711,154 @@ inline void setup()
 #if USE_TIMER4_COUNTER_HANDSET
 	timer_counter_setup(TIM4, TIM_COUNTER_PERIOD, TIM_COUNTER_FREQ);// echo tick 1/1000000 s, 60ms one round
 #endif
+
+
 }
+
+#if USE_IMU_AHRS_BOARD
+#define MAX_IMU_FRAME_LEN  30 // 16  or 22
+#define IMU_FRAME_AHRS_TAG 0xA1 
+#define IMU_FRAME_6AXI_TAG 0xA2 
+typedef struct _imu_ahrs_packet{
+	uint8_t type; // 0xa1 arsh ; 0xa2 6 axi
+	float yaw;
+	float pitch;
+	float roll;
+	float alt;  //高度
+	float tempr;//温度
+	float press;//气ya
+	int16_t ax;
+	int16_t ay;
+	int16_t az;
+	int16_t gx;
+	int16_t gy;
+	int16_t gz;
+	int16_t mx;
+	int16_t my;
+	int16_t mz;
+}imu_ahrs_packet;
+volatile uint8_t imu_buffer[64]={0};
+volatile uint16_t imu_idx = 0;
+volatile uint16_t imu_len = 0;
+volatile imu_ahrs_packet imu_packet;
+
+int16_t mix_h_l_byte(uint8_t *data , int h_idx, int l_idx){
+	int16_t tmp;
+	tmp = 0;
+	tmp = data[h_idx];
+	tmp = tmp << 8;
+	tmp |= data[l_idx];
+	if( tmp & 0x8000 ){
+		tmp = 0-(tmp&0x7fff);
+	}else
+		tmp &= 0x7fff;
+	return tmp;
+}
+int imu_check_a_frame(){
+	int i;
+	uint32_t checksum = 0;
+	if( imu_buffer[imu_len-1] != 0xAA ) return -1; 
+
+	for( i=2; i< imu_len-2; i++ ){
+		checksum += imu_buffer[i];
+	}
+	if( (checksum%256) == imu_buffer[imu_len-2] )
+		return 0;
+	else 
+		return -1;
+}
+void decode_imu_ahrs_data(imu_ahrs_packet *packet){
+	packet->type = imu_buffer[3];
+	packet->yaw = (float)mix_h_l_byte(imu_buffer,4,5)/10.0f;
+	packet->pitch = (float)mix_h_l_byte(imu_buffer,6,7)/10.0f;
+	packet->roll = (float)mix_h_l_byte(imu_buffer,8,9)/10.0f;
+	packet->alt = (float)mix_h_l_byte(imu_buffer,10,11)/10.0f;
+	packet->tempr = (float)mix_h_l_byte(imu_buffer,12,13)/10.0f;
+	packet->press = (float)mix_h_l_byte(imu_buffer,14,15)/10.0f;
+}
+void decode_imu_6axi_data(imu_ahrs_packet *packet){
+	packet->type = imu_buffer[3];
+	packet->ax = mix_h_l_byte(imu_buffer,4,5);
+	packet->ay = mix_h_l_byte(imu_buffer,6,7);
+	packet->az = mix_h_l_byte(imu_buffer,8,9);
+	packet->gx = mix_h_l_byte(imu_buffer,10,11);
+	packet->gy = mix_h_l_byte(imu_buffer,12,13);
+	packet->gz = mix_h_l_byte(imu_buffer,14,15);
+	packet->mx = mix_h_l_byte(imu_buffer,16,17);
+	packet->my = mix_h_l_byte(imu_buffer,18,19);
+	packet->mz = mix_h_l_byte(imu_buffer,20,21);
+}
+int imu_parse_char(uint8_t c, imu_ahrs_packet *packet)
+{
+	if( imu_idx == 0 ){
+		if( c == 0xA5 ) 
+			imu_buffer[imu_idx++] = c;
+	}else if( imu_idx == 1 ){
+		if( c == 0x5A ) 
+			imu_buffer[imu_idx++] = c;
+	}else if( imu_idx == 2 ){
+		imu_buffer[imu_idx++] = c;
+		imu_len = c+2;
+		if( imu_len > MAX_IMU_FRAME_LEN ){
+			imu_idx=0;
+			log("error %d\r\n",__LINE__);
+		}
+	}else{
+		imu_buffer[imu_idx++] = c;
+		if( imu_idx >= imu_len ){ // get a frame
+			/*
+			log("get a frame :");
+			int j;
+			for( j=0; j<imu_len; j++)
+				log("%x,",imu_buffer[j]);
+			log("\r\n");
+			*/
+			int ret = 0;
+			if( 0 == imu_check_a_frame() ){
+				ret = 1;
+				if( imu_buffer[3] == IMU_FRAME_AHRS_TAG ){
+					decode_imu_ahrs_data(packet);
+				}else if( imu_buffer[3] == IMU_FRAME_6AXI_TAG ){
+					decode_imu_6axi_data(packet);
+				}else{
+					ret = 0;
+					log("error frame %d\r\n",__LINE__);
+				}
+			}else{
+				ret = 0;
+				log("error frame %d\r\n",__LINE__);
+			}
+			imu_idx = 0;
+			imu_len = 0;
+			return ret;
+		}
+	}
+	return 0;// no packet
+}
+
+void imu_parase_package_loop()
+{
+	int data_len;
+	int i;
+	data_len = uart_char_available(&uart3);
+	for( i=0; i< data_len ; i++){
+		if( 1 == imu_parse_char(uart_getch(&uart3),&imu_packet) ){
+			if( imu_packet.type == IMU_FRAME_AHRS_TAG ){
+				log("get ahrs: %f, %f, %f, %f, %f, %f\r\n", imu_packet.yaw, imu_packet.pitch, imu_packet.roll ,imu_packet.alt ,imu_packet.tempr,imu_packet.press);
+			}else{
+				/*
+				log("get axi: %d,%d,%d,, %d,%d,%d,, %d,%d,%d\r\n", imu_packet.ax,imu_packet.ay,imu_packet.az, \
+				imu_packet.gx,imu_packet.gy,imu_packet.gz, \
+				imu_packet.mx,imu_packet.my,imu_packet.mz);//imu_packet.pitch, imu_packet.roll ,imu_packet.alt ,imu_packet.tmp,imu_packet.press);
+				*/
+			}
+			delay_ms(10);
+		}
+	}
+	delay_ms(10);
+}
+#endif // USE_IMU_AHRS_BOARD
+
 
 inline void loop()
 {
