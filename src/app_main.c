@@ -522,7 +522,7 @@ typedef struct _rc_mix_type {
 	char start_position ;
 	char valiable ;
 }rc_mix_type;
-#define MIX_LIST_MAX_COUNT 4
+#define MIX_LIST_MAX_COUNT 8
 rc_mix_type mix_list[MIX_LIST_MAX_COUNT];
 void init_rc_mix_list()
 {
@@ -535,6 +535,15 @@ rc_mix_type *get_empty_rc_mix()
 	int i;
 	for ( i=0; i< MIX_LIST_MAX_COUNT; i++){
 		if( mix_list[i].valiable == 0 )
+			return &mix_list[i];
+	}
+	return NULL;
+}
+rc_mix_type *get_refer_rc_mix(char mainid ,char slaveid)
+{
+	int i;
+	for ( i=0; i< MIX_LIST_MAX_COUNT; i++){
+		if( mix_list[i].main_id == mainid && mix_list[i].slave_id == slaveid && mix_list[i].valiable == 1 )
 			return &mix_list[i];
 	}
 	return NULL;
@@ -600,10 +609,14 @@ void do_rc_config( mavlink_message_t * msg)
 			log("set revert=%d\r\n",revert);
 		}
 	}else if(packet.time_boot_ms == MIX_CONFIG_ID){
-		rc_mix = get_empty_rc_mix();
-		if( rc_mix == NULL ) {
-			log("no empty mix for new one\r\n");
-			return;
+		rc_mix = get_refer_rc_mix( packet.chan1_raw,  packet.chan2_raw);
+		if( rc_mix == NULL ){
+			log("no live rc_mix \r\n");
+			rc_mix = get_empty_rc_mix();
+			if( rc_mix == NULL ) {
+				log("no empty mix for new one\r\n");
+				return;
+			}
 		}
 		//main id
 		tmp = packet.chan1_raw;
@@ -643,6 +656,8 @@ void do_rc_config( mavlink_message_t * msg)
 		log("mix sub persen=%f\r\n",rc_mix->sub_persen);
 
 		rc_mix->valiable = 1;
+	}else{
+		log("unknow config packet!!!!!! \r\n");
 	}
 }
 inline uint16_t get_adc(int id)
@@ -756,22 +771,23 @@ inline uint16_t cail_user_mix_rc(){
 
 				if( middle_val > get_rc(mid) ){
 					if( mix_list[i].sub_persen != 0){
-						again[sid] = -1*mix_list[i].sub_persen * (middle_val - get_rc(sid)); 
+						again[sid] = -1*mix_list[i].sub_persen * (middle_val - get_rc(mid)); 
 					}
 				}else{
 					if( mix_list[i].add_persen != 0){
-						again[sid] = mix_list[i].add_persen * (get_rc(sid)-middle_val) ;
+						again[sid] = mix_list[i].add_persen * (get_rc(mid)-middle_val) ;
 					}
 				}
 			}
+			//rc_value_list[sid] += again[sid]; 
 		}
 	}
+
 	for( i=0 ; i < RC_MAX_COUNT ; i++){
 		if( again[i] != 0 ){
 			rc_value_list[i] += again[i]; 
 		}
 	}
-
 }
 inline uint16_t cail_user_trim_rc(){
 	int i;
@@ -797,8 +813,8 @@ void update_rc()
 		rc = user_curve_rc_raw(i,rc);
 		rc_value_list[i] = user_zoom_rc(i,rc);
 	}
-	//cail_user_mix_rc();
-	//cail_user_trim_rc();
+	cail_user_trim_rc();
+	cail_user_mix_rc();
 }
 
 
@@ -1307,6 +1323,7 @@ void do_usb_serial_echo()
 }
 
 
+#if USE_IMU60x0
 
 #include "peripherals/mpu60x0_i2c.h" 
 #define IMU_MPU60X0_ACCEL_RANGE MPU60X0_ACCEL_RANGE_16G
@@ -1381,7 +1398,7 @@ void imu_data_log()
 	log("x,y=%d,%d\r\n",x,y);
 }
 
-
+#endif //USE_IMU60x0
 
 
 #if USE_TIMER4_COUNTER_HANDSET
@@ -1667,54 +1684,6 @@ void zframe_sender_loop()
 
 #endif// ZFRAME_SENDER
 
-
-
-
-//#################################################### main 
-
-inline void setup()
-{
-	//mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
-	mcu_arch_init();
-	sys_time_init();
-#if USE_UART0
- 	uart0_init();
-#endif
-#if USE_UART1
-	uart1_init();
-#endif
-#if USE_UART2
-	uart2_init();
-#endif
-#if USE_UART3
-	uart3_init();
-#endif
-#ifdef USE_I2C1
-	i2c1_init();
-#endif
-
-#ifdef ZFRAME_SENDER
-	zframe_sender_setup();
-#endif
-#ifdef ZFRAME_RECIVER
-	zframe_reciver_setup();
-#endif
-
-#if USE_SIMPLE_USB_SERIAL
-	simple_usb_serial_init();
-#endif
-
-#if USE_IMU60x0
-	imu_impl_init();
-#endif
-
-#if USE_TIMER4_COUNTER_HANDSET
-	timer_counter_setup(TIM4, TIM_COUNTER_PERIOD, TIM_COUNTER_FREQ);// echo tick 1/1000000 s, 60ms one round
-#endif
-
-
-}
-
 #if USE_IMU_AHRS_BOARD
 #define MAX_IMU_FRAME_LEN  30 // 16  or 22
 #define IMU_FRAME_AHRS_TAG 0xA1 
@@ -1858,6 +1827,54 @@ void imu_parase_package_loop()
 	delay_ms(10);
 }
 #endif // USE_IMU_AHRS_BOARD
+
+
+
+//#################################################### main 
+
+inline void setup()
+{
+	//mcu_init(); //define PERIPHERALS_AUTO_INIT in makefile , and will init preiph auto in mcu_init(), like uartx_init()
+	mcu_arch_init();
+	sys_time_init();
+#if USE_UART0
+ 	uart0_init();
+#endif
+#if USE_UART1
+	uart1_init();
+#endif
+#if USE_UART2
+	uart2_init();
+#endif
+#if USE_UART3
+	uart3_init();
+#endif
+#ifdef USE_I2C1
+	i2c1_init();
+#endif
+
+#ifdef ZFRAME_SENDER
+	zframe_sender_setup();
+#endif
+#ifdef ZFRAME_RECIVER
+	zframe_reciver_setup();
+#endif
+
+#if USE_SIMPLE_USB_SERIAL
+	simple_usb_serial_init();
+#endif
+
+#if USE_IMU60x0
+	imu_impl_init();
+#endif
+
+#if USE_TIMER4_COUNTER_HANDSET
+	timer_counter_setup(TIM4, TIM_COUNTER_PERIOD, TIM_COUNTER_FREQ);// echo tick 1/1000000 s, 60ms one round
+#endif
+
+
+}
+
 
 
 inline void loop()
