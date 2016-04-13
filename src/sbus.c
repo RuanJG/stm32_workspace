@@ -11,6 +11,8 @@ void sbus_buffer_init(struct sbus_buffer *sbus_b)
 {
 	sbus_b->frame_available = FALSE;
 	sbus_b->status = SBUS_STATUS_UNINIT;
+	sbus_b->frame_capture_faile = 0;
+	sbus_b->frame_decode_faile = 0;
 }
 
 #define SBUS_RANGE_MIN 200.0f
@@ -61,7 +63,7 @@ void encode_sbus_frame(uint16_t *values, uint16_t num_values, uint8_t *oframe)
 void decode_sbus_frame(const uint8_t *src, uint16_t *dst, bool_t *available)
 {
   // reset counters
-  uint8_t byteInRawBuf = 0;
+  uint8_t byteInRawBuf = 1;
   uint8_t bitInRawBuf = 0;
   uint8_t channel = 0;
   uint8_t bitInChannel = 0;
@@ -88,7 +90,7 @@ void decode_sbus_frame(const uint8_t *src, uint16_t *dst, bool_t *available)
     }
   }
   // test frame lost flag
-  *available = !bit_is_set(src[SBUS_FLAGS_BYTE_IDX-1], SBUS_FRAME_LOST_BIT);
+  *available = !bit_is_set(src[SBUS_FLAGS_BYTE_IDX], SBUS_FRAME_LOST_BIT);
 }
 
 #if 0
@@ -169,36 +171,7 @@ void decode_sbus_frame_pix(const uint8_t *frame, uint16_t *dst, bool_t *availabl
  		if get a sbus frame , decode it to sbus_buff->rc_chans 
 		and return 1
 */
-int parse_sbus_frame(uint8_t rbyte , struct sbus_buffer *sbus_p)
-{
-	uint8_t ret = 0;
-      switch (sbus_p->status) {
-        case SBUS_STATUS_UNINIT:
-          // Wait for the start byte
-          if (rbyte == SBUS_START_BYTE) {
-            sbus_p->status++;
-            sbus_p->idx = 1;
-          }
-          break;
-        case SBUS_STATUS_GOT_START:
-          // Store buffer
-          sbus_p->buffer[sbus_p->idx] = rbyte;
-          sbus_p->idx++;
-          if (sbus_p->idx == SBUS_FRAME_SIZE) {
-            // Decode if last byte is the correct end byte
-            if (rbyte == SBUS_END_BYTE) {
-              decode_sbus_frame(&sbus_p->buffer[1], sbus_p->rc_chans, &sbus_p->frame_available);
-	      ret = 1;
-            }
-            sbus_p->status = SBUS_STATUS_UNINIT;
-          }
-          break;
-        default:
-          break;
-      }	
 
-      return ret;
-}
 
 static uint8_t oframe[SBUS_FRAME_SIZE] = { 0x0f };
 void send_sbus_out (uint16_t *rc_chans, uint16_t rc_count, void (*cb)(uint8_t * data, int len))
