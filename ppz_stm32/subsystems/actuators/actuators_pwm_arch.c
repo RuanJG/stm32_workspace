@@ -111,6 +111,23 @@ void actuators_pwm_arch_init(void)
 #ifdef PWM_SERVO_11
   gpio_setup_pin_af(PWM_SERVO_11_GPIO, PWM_SERVO_11_PIN, PWM_SERVO_11_AF, TRUE);
 #endif
+#ifdef PWM_SERVO_12
+  gpio_setup_pin_af(PWM_SERVO_12_GPIO, PWM_SERVO_12_PIN, PWM_SERVO_12_AF, TRUE);
+#endif
+#ifdef PWM_SERVO_13
+  gpio_setup_pin_af(PWM_SERVO_13_GPIO, PWM_SERVO_13_PIN, PWM_SERVO_13_AF, TRUE);
+#endif
+#ifdef PWM_SERVO_14
+  gpio_setup_pin_af(PWM_SERVO_14_GPIO, PWM_SERVO_14_PIN, PWM_SERVO_14_AF, TRUE);
+#endif
+#ifdef PWM_SERVO_15
+  gpio_setup_pin_af(PWM_SERVO_15_GPIO, PWM_SERVO_15_PIN, PWM_SERVO_15_AF, TRUE);
+#endif
+#ifdef PWM_SERVO_16
+  gpio_setup_pin_af(PWM_SERVO_16_GPIO, PWM_SERVO_16_PIN, PWM_SERVO_16_AF, TRUE);
+#endif
+
+
 
 #if PWM_USE_TIM1
   set_servo_timer(TIM1, TIM1_SERVO_HZ, PWM_TIM1_CHAN_MASK);
@@ -185,6 +202,21 @@ void actuators_pwm_commit(void)
 #endif
 #ifdef PWM_SERVO_11
   timer_set_oc_value(PWM_SERVO_11_TIMER, PWM_SERVO_11_OC, actuators_pwm_values[PWM_SERVO_11]);
+#endif
+#ifdef PWM_SERVO_12
+  timer_set_oc_value(PWM_SERVO_12_TIMER, PWM_SERVO_12_OC, actuators_pwm_values[PWM_SERVO_12]);
+#endif
+#ifdef PWM_SERVO_13
+  timer_set_oc_value(PWM_SERVO_13_TIMER, PWM_SERVO_13_OC, actuators_pwm_values[PWM_SERVO_13]);
+#endif
+#ifdef PWM_SERVO_14
+  timer_set_oc_value(PWM_SERVO_14_TIMER, PWM_SERVO_14_OC, actuators_pwm_values[PWM_SERVO_14]);
+#endif
+#ifdef PWM_SERVO_15
+  timer_set_oc_value(PWM_SERVO_15_TIMER, PWM_SERVO_15_OC, actuators_pwm_values[PWM_SERVO_15]);
+#endif
+#ifdef PWM_SERVO_16
+  timer_set_oc_value(PWM_SERVO_16_TIMER, PWM_SERVO_16_OC, actuators_pwm_values[PWM_SERVO_16]);
 #endif
 
 }
