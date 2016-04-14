@@ -48,6 +48,12 @@ void actuators_pwm_arch_channel_init(uint32_t timer_peripheral,
   timer_enable_oc_output(timer_peripheral, oc_id);
   // Used for TIM1 and TIM8, the function does nothing if other timer is specified.
   timer_enable_break_main_output(timer_peripheral);
+
+/*
+	timer_update_on_overflow(timer_peripheral);// update_event type is overflow ,ignore ug event and slave timer event
+	timer_enable_update_event(timer_peripheral); //enable update_event
+	timer_enable_irq(timer_peripheral,TIM_DIER_UIE); //enable irq controller
+	*/
 }
 
 
@@ -104,10 +110,10 @@ void set_servo_timer(uint32_t timer, uint32_t freq, uint8_t channels_mask)
    * Note: Maybe we should preload the compare registers with some sensible
    * values before we enable the timer?
    */
-  //timer_set_oc_value(timer, TIM_OC1, 1000);
-  //timer_set_oc_value(timer, TIM_OC2, 1000);
-  //timer_set_oc_value(timer, TIM_OC3, 1000);
-  //timer_set_oc_value(timer, TIM_OC4, 1000);
+  timer_set_oc_value(timer, TIM_OC1, 1000);
+  timer_set_oc_value(timer, TIM_OC2, 1000);
+  timer_set_oc_value(timer, TIM_OC3, 1000);
+  timer_set_oc_value(timer, TIM_OC4, 1000);
 
   /* -- Enable timer -- */
   /*
@@ -116,10 +122,16 @@ void set_servo_timer(uint32_t timer, uint32_t freq, uint8_t channels_mask)
    * is unlikely we will want to change the frequency of the timer during
    * runtime anyways.
    */
+#if 0
   timer_enable_preload(timer);
 
   /* Counter enable. */
   timer_enable_counter(timer);
+#else
+  timer_disable_preload(timer);
+  timer_disable_counter(timer);
+#endif
 
 }
+
 

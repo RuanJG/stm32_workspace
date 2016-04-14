@@ -38,9 +38,40 @@ extern int32_t actuators_pwm_values[ACTUATORS_PWM_NB];
 extern void actuators_pwm_arch_init(void);
 extern void actuators_pwm_commit(void);
 
+void actuators_pwm_stop(void);
+void actuators_pwm_start(void);
 #define SERVOS_TICS_OF_USEC(_v) (_v)
 
 #define ActuatorPwmSet(_i, _v) { actuators_pwm_values[_i] = _v; }
 #define ActuatorsPwmCommit  actuators_pwm_commit
+
+inline uint32_t actuators_pwm_get_max_counter(void)
+{
+//TODO : I think the timers should be sync , so just read one valiable timer enouth
+
+#if PWM_USE_TIM1
+  return timer_get_counter(TIM1);
+#endif
+
+#if PWM_USE_TIM3
+  return timer_get_counter(TIM3);
+#endif
+
+#if PWM_USE_TIM4
+  return timer_get_counter(TIM4);
+#endif
+
+#if PWM_USE_TIM2
+  return timer_get_counter(TIM2);
+#endif
+
+#if PWM_USE_TIM5
+  return timer_get_counter(TIM5);
+#endif
+
+#if PWM_USE_TIM8
+  return timer_get_counter(TIM8);
+#endif
+}
 
 #endif /* ACTUATORS_PWM_ARCH_H */

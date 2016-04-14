@@ -7,11 +7,6 @@
 #define EXT_CLK 8000000
 #define AHB_CLK 72000000
 
-/* Onboard LEDs */
-#ifndef USE_LED_1
-#define USE_LED_1 1
-#endif
-#define LED_STP08
 
 /* SPI slave mapping */
 
@@ -86,6 +81,13 @@
 
 
 
+/* PWM led  */
+#define USE_PWM_LED 1
+#define PWM_LED_GPIO GPIOC
+#define PWM_LED_PIN GPIO13
+#define PWM_LED_ON() gpio_clear(PWM_LED_GPIO,PWM_LED_PIN)
+#define PWM_LED_OFF() gpio_set(PWM_LED_GPIO,PWM_LED_PIN)
+#define PWM_LED_TOGGLE() gpio_toggle(PWM_LED_GPIO,PWM_LED_PIN)
 
 
 /* Default actuators driver */
@@ -323,8 +325,6 @@
 #else
 #define PWM_SERVO_16_OC_BIT 0
 #endif
-
-
 
 
 /* servos 1-4 on TIM3 */

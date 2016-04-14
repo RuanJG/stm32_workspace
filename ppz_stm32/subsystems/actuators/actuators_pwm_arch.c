@@ -220,3 +220,70 @@ void actuators_pwm_commit(void)
 #endif
 
 }
+
+inline void start_servo_timer(uint32_t timer)
+{
+  timer_enable_preload(timer);
+  timer_enable_counter(timer);
+}
+inline void stop_servo_timer(uint32_t timer)
+{
+  timer_disable_preload(timer);
+  timer_disable_counter(timer);
+}
+
+void actuators_pwm_start(void)
+{
+#if PWM_USE_TIM1
+  start_servo_timer(TIM1);
+#endif
+
+#if PWM_USE_TIM3
+  start_servo_timer(TIM3);
+#endif
+
+#if PWM_USE_TIM4
+  start_servo_timer(TIM4);
+#endif
+
+#if PWM_USE_TIM2
+  start_servo_timer(TIM2);
+#endif
+
+#if PWM_USE_TIM5
+  start_servo_timer(TIM5);
+#endif
+
+#if PWM_USE_TIM8
+  start_servo_timer(TIM8);
+#endif
+}
+
+void actuators_pwm_stop(void)
+{
+
+#if PWM_USE_TIM1
+  stop_servo_timer(TIM1);
+#endif
+
+#if PWM_USE_TIM3
+  stop_servo_timer(TIM3);
+#endif
+
+#if PWM_USE_TIM4
+  stop_servo_timer(TIM4);
+#endif
+
+#if PWM_USE_TIM2
+  stop_servo_timer(TIM2);
+#endif
+
+#if PWM_USE_TIM5
+  stop_servo_timer(TIM5);
+#endif
+
+#if PWM_USE_TIM8
+  stop_servo_timer(TIM8);
+#endif
+	
+}
