@@ -34,7 +34,7 @@
 #define ACTUATORS_PWM_NB 8
 #endif
 
-extern int32_t actuators_pwm_values[ACTUATORS_PWM_NB];
+extern int16_t actuators_pwm_values[ACTUATORS_PWM_NB];
 extern void actuators_pwm_arch_init(void);
 extern void actuators_pwm_commit(void);
 

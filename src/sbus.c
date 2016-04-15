@@ -38,8 +38,11 @@ void encode_sbus_frame(uint16_t *values, uint16_t num_values, uint8_t *oframe)
 	/* 16 is sbus number of servos/channels minus 2 single bit channels.
 	* currently ignoring single bit channels.  */
 	for (i = 0; (i < num_values) && (i < SBUS_MAX_RC_COUNT); ++i) {
-		//value = (uint16_t)(((values[i] - sbus_scale_offset) / sbus_scale_factor) + 0.5f);
+#if USE_PIX_SBUS_PROTOCOL
+		value = (uint16_t)(((values[i] - sbus_scale_offset) / sbus_scale_factor) + 0.5f);
+#else
     		value = (uint16_t)values[i];
+#endif
 	    	/*protect from out of bounds values and limit to 11 bits*/
 	    	if (value > 0x07ff) {
 			value = 0x07ff;
@@ -68,6 +71,9 @@ void decode_sbus_frame(const uint8_t *src, uint16_t *dst, bool_t *available)
   uint8_t channel = 0;
   uint8_t bitInChannel = 0;
 
+	static float sbus_scale_factor = SBUS_SCALE_FACTOR;// = ((SBUS_TARGET_MAX - SBUS_TARGET_MIN) / (SBUS_RANGE_MAX - SBUS_RANGE_MIN));
+	static int  sbus_scale_offset = SBUS_SCALE_OFFSET ;//= (int)(SBUS_TARGET_MIN - (SBUS_SCALE_FACTOR * SBUS_RANGE_MIN + 0.5f));
+
   // clear bits
   memset(dst, 0, SBUS_MAX_RC_COUNT * sizeof(uint16_t));
 
@@ -86,6 +92,11 @@ void decode_sbus_frame(const uint8_t *src, uint16_t *dst, bool_t *available)
     }
     if (bitInChannel == SBUS_BIT_PER_CHANNEL) {
       bitInChannel = 0;
+#if USE_PIX_SBUS_PROTOCOL
+      //value = (uint16_t)(((values[i] - sbus_scale_offset) / sbus_scale_factor) + 0.5f);
+      //dst[channel] = (uint16_t)(dst[channel]-0.5f)*sbus_scale_factor + sbus_scale_offset;
+      dst[channel] = (uint16_t)(dst[channel] * sbus_scale_factor + .5f) + sbus_scale_offset;
+#endif
       channel++;
     }
   }

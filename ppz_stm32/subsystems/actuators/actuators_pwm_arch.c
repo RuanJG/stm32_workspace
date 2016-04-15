@@ -36,7 +36,7 @@
 #include "mcu_periph/gpio_arch.h"
 
 
-int32_t actuators_pwm_values[ACTUATORS_PWM_NB];
+int16_t actuators_pwm_values[ACTUATORS_PWM_NB];
 
 
 /** PWM arch init called by generic pwm driver

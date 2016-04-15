@@ -64,7 +64,7 @@ void test_protocol_loop()
 	uint8_t crc_oframe[CRC_SBUS_FRAME_SIZE] = { 0x0f };
 
 	sbus_buffer_init(&sbus_buf);
-	for( value = 500; value < 0x800; value++){
+	for( value = 900; value < 0x800; value++){
 		for( i=0 ;i < 16; i++ ) rc_chans[i] = value;
 
 #if 0
@@ -74,7 +74,7 @@ void test_protocol_loop()
 #else
 		protocol_send(rc_chans,16,&protocol_send_func);
 #endif
-		//log("o=%d\r\n",rc_chans[0]);
+		log("o=%d\r\n",rc_chans[0]);
 		for( i=0 ;i < 16; i++ ){
 			log("%d,",sbus_buf.rc_chans[i]);
 			if( rc_chans[i] != sbus_buf.rc_chans[i] ){

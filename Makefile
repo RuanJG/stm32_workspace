@@ -2,13 +2,7 @@
 
 #the name of the app
 BINARY = app_main
-ASM_SRC += $(shell find  ./src -name '*.s')
-C_SRC+= $(shell find  ./src -name '*.c')
-C_SRC+= $(shell find  ./ppz_stm32 -name '*.c')
-OBJS += $(ASM_SRC:%.s=%.o)
-OBJS += $(C_SRC:%.c=%.o)
-LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xb.ld
-CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
+#ASM_SRC += $(shell find  ./src -name '*.s')
 CFLAGS += -std=c99
 
 CFLAGS += -DBOARD_CONFIG=\<lisa_l_1.0.h\>
@@ -17,52 +11,82 @@ CFLAGS += -DPERIPHERALS_AUTO_INIT
 
 CFLAGS += -DUART_RX_BUFFER_SIZE=1024
 CFLAGS += -DUART_TX_BUFFER_SIZE=1024
+
+
+C_SRC+= $(shell find  ./ppz_stm32 -name '*.c')
+CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
+
+################################## main
+C_SRC+= src/app_main.c
+################################### protocol
+C_SRC+= src/sbus.c
+C_SRC+= src/crc_sbus.c
+C_SRC+= src/protocol.c
+
+
+
+#####################  debug
+ifeq  (1,0)
 CFLAGS += -DUSE_UART1=1
-CFLAGS += -DUSE_UART2=1
-CFLAGS += -DUSE_UART3=1
-#CFLAGS += -DUSE_UART5=1
 CFLAGS += -DUART1_BAUD=115200
-CFLAGS += -DUART2_BAUD=100000
+endif
+
+####################sbus output
+ifeq  (1,1)
+CFLAGS += -DSBUS_OUT_UART=uart1
+CFLAGS += -DSBUS_OUT_UART_USE_RECIVE_BUFF=1 #CRC_SBUS_0/1_IN_UART enable
+CFLAGS += -DUSE_PIX_SBUS_PROTOCOL=1
+CFLAGS += -DUSE_UART1=1
+CFLAGS += -DUART1_BAUD=100000
+CFLAGS += -DUSE_UART1_TX=TRUE
+CFLAGS += -DUSE_UART1_RX=FALSE
+CFLAGS += -DUART1_HW_FLOW_CONTROL=FALSE
+CFLAGS += -DUART1_BITS=UBITS_8
+CFLAGS += -DUART1_STOP=USTOP_2
+CFLAGS += -DUART1_PARITY=UPARITY_EVEN
+endif
+
+#################### crc_sbus input
+ifeq  (1,1)
+CFLAGS += -DCRC_SBUS_0_IN_UART=uart3
+CFLAGS += -DUSE_UART3=1
 CFLAGS += -DUART3_BAUD=115200
-#CFLAGS += -DUART5_BAUD=115200
+endif
 
-#CFLAGS += -DUSE_UART1_TX=TRUE
-#CFLAGS += -DUSE_UART1_RX=FALSE
-#CFLAGS += -DUART1_HW_FLOW_CONTROL=FALSE
-#CFLAGS += -DUART1_BITS=UBITS_8
-#CFLAGS += -DUART1_STOP=USTOP_2
-#CFLAGS += -DUART1_PARITY=UPARITY_EVEN
+ifeq  (1,0)
+CFLAGS += -DCRC_SBUS_1_IN_UART=uart1
+CFLAGS += -DUSE_UART1=1
+CFLAGS += -DUART1_BAUD=115200
+endif
 
-CFLAGS += -DUSE_UART2_TX=TRUE
-CFLAGS += -DUSE_UART2_RX=FALSE
-CFLAGS += -DUART2_HW_FLOW_CONTROL=FALSE
-CFLAGS += -DUART2_BITS=UBITS_8
-CFLAGS += -DUART2_STOP=USTOP_2
-CFLAGS += -DUART2_PARITY=UPARITY_EVEN
+#################### crc_sbus output
+ifeq  (1,0)
+CFLAGS += -DUSE_FAKE_RC_IN=1
+CFLAGS += -DCRC_SBUS_OUT_UART=uart3
+CFLAGS += -DUSE_UART3=1
+CFLAGS += -DUART3_BAUD=115200
+endif
+
+################################pwm
+C_SRC+= src/pwm.c
+CFLAGS += -DSERVO_HZ=40
+CFLAGS += -DPWM_UPDATE_OC_VALUE_DIFF_US=5000
 
 
-CFLAGS += -DZFRAME_RECIVER
-
-CFLAGS += -DUSE_SPI1
-CFLAGS += -DSPI_MASTER
-
-#CFLAGS += -DGPIOE
-#CFLAGS += -DGPIOF
-#CFLAGS += -DGPIOG
-#CFLAGS += -DGPIOH
-#CFLAGS += -DGPIOI
-
+################################## other
+#CFLAGS += -DUSE_SPI1
+#CFLAGS += -DSPI_MASTER
 #CFLAGS += -DUSE_I2C0=1
 #CFLAGS += -DUSE_I2C1=1
 #CFLAGS += -DUSE_I2C2=1
 #CFLAGS += -DUSE_I2C3=1
 
 
+CFLAGS += -w
 
-
-
-
-
+OBJS += $(ASM_SRC:%.s=%.o)
+OBJS += $(C_SRC:%.c=%.o)
+LDSCRIPT = ./libopencm3/lib/stm32/f1/stm32f103xc.ld
 
 
 

@@ -17,6 +17,6 @@ if [ $tool'x' == 'stlinkx' ]; then
 		echo no *.bin find or input, run: make bin 
 		exit 1
 	fi
-	./tools/stlink/st-flash write $app 0x8000000
+	sudo ./tools/stlink/st-flash write $app 0x8000000
 fi
 
