@@ -834,6 +834,15 @@ uint16_t get_rc_for_reciver(id)
 
 
 
+#include "sbus.h"
+#include "crc_sbus.h"
+static uint8_t crc_sbus_out_oframe[CRC_SBUS_FRAME_SIZE] = { 0x0f };
+void send_crc_sbus_by_uart( struct uart_periph *uart, uint16_t *rc_chans, int count)
+{
+	encode_crc_sbus_frame(rc_chans, count , crc_sbus_out_oframe);
+	do_uart_wirte(uart,crc_sbus_out_oframe, CRC_SBUS_FRAME_SIZE);	
+}
+
 
 #define ZFRAME_RCS_INT_COUNT 2 // RC_MAX_COUNT/3; as each int store 3 rc, (RC_MAX_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
 #define ZFRAME_BUFF_SIZE 13 //tag(2) + rcs(4*ZFRAME_RCS_INT_COUNT) + crc(2) + len(1) = 12 
@@ -1647,14 +1656,15 @@ void zframe_sender_loop()
 		if( rc_value_list[RC_THR_ID] < RC_MIN_VALUE ) rc_value_list[RC_THR_ID]=RC_MIN_VALUE;
 		if( rc_value_list[RC_THR_ID] > RC_MAX_VALUE ) rc_value_list[RC_THR_ID]=RC_MAX_VALUE;
 		#endif
-		send_rc_to_reciver_by_uart();
+		//send_rc_to_reciver_by_uart();
+		send_crc_sbus_by_uart(&uart2,rc_value_list,RC_MAX_COUNT);
 		//t2 = get_sys_time_float();
 		//log("send time : %f\r\n",t1-t2);
 		
 		/*
 		for( int i=0; i< RC_MAX_COUNT; i++)
-			//log("%d,",get_adc(i));
-			log("%d,",get_rc(i));
+			log("%d,",get_adc(i));
+			//log("%d,",get_rc(i));
 		log("\r\n");
 		*/
 	
