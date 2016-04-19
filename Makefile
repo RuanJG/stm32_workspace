@@ -20,6 +20,7 @@ CFLAGS += -I ./mavlinkNew -I src -I ./ppz_stm32/
 C_SRC+= src/app_main.c
 ################################### protocol
 C_SRC+= src/sbus.c
+CFLAGS += -DUSE_PIX_SBUS_PROTOCOL=1
 C_SRC+= src/crc_sbus.c
 C_SRC+= src/protocol.c
 
@@ -35,7 +36,6 @@ endif
 ifeq  (1,1)
 CFLAGS += -DSBUS_OUT_UART=uart1
 CFLAGS += -DSBUS_OUT_UART_USE_RECIVE_BUFF=1 #CRC_SBUS_0/1_IN_UART enable
-CFLAGS += -DUSE_PIX_SBUS_PROTOCOL=1
 CFLAGS += -DUSE_UART1=1
 CFLAGS += -DUART1_BAUD=100000
 CFLAGS += -DUSE_UART1_TX=TRUE
@@ -47,6 +47,7 @@ CFLAGS += -DUART1_PARITY=UPARITY_EVEN
 endif
 
 #################### crc_sbus input
+CFLAGS += -DCRC_SBUS_IN_DEBUG=1
 ifeq  (1,1)
 CFLAGS += -DCRC_SBUS_0_IN_UART=uart3
 CFLAGS += -DUSE_UART3=1

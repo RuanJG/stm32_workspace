@@ -13,6 +13,8 @@ void sbus_buffer_init(struct sbus_buffer *sbus_b)
 	sbus_b->status = SBUS_STATUS_UNINIT;
 	sbus_b->frame_capture_faile = 0;
 	sbus_b->frame_decode_faile = 0;
+	sbus_b->frame_count = 0;
+	sbus_b->rssi = 0;
 }
 
 #define SBUS_RANGE_MIN 200.0f

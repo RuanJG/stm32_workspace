@@ -38,6 +38,7 @@ inline int parse_crc_sbus_frame(uint8_t rbyte , struct sbus_buffer *sbus_p)
           if (sbus_p->idx == CRC_SBUS_FRAME_SIZE) {
             // Decode if last byte is the correct end byte
             if (rbyte == SBUS_END_BYTE) {
+	    	sbus_p->frame_count++;
 		crc = sbus_p->buffer[CRC_SBUS_CRC_L_IDX] | (sbus_p->buffer[CRC_SBUS_CRC_H_IDX]<<8);
 		crc_cal = sbus_crc_calculate(sbus_p->buffer,CRC_SBUS_CRC_DATA_SIZE);
 		if( crc == crc_cal ){

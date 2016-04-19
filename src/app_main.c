@@ -161,9 +161,16 @@ struct sbus_buffer crc_sbus0_uart_buf;
 #ifdef CRC_SBUS_1_IN_UART
 struct sbus_buffer crc_sbus1_uart_buf;
 #endif
+#if CRC_SBUS_IN_DEBUG
+int crc_sbus_debug_t = -1;
+#endif
 void crc_sbus_in_uart_setup(struct sbus_buffer *sbus_b)
 {
 	sbus_buffer_init(sbus_b);
+#if CRC_SBUS_IN_DEBUG
+	if( crc_sbus_debug_t < 0 )
+		crc_sbus_debug_t = sys_time_register_timer(1.0, NULL);
+#endif
 }
 inline void crc_sbus_in_uart_loop(struct uart_periph *uart , struct sbus_buffer *sbus_b)
 {
@@ -183,16 +190,50 @@ inline void crc_sbus_in_uart_loop(struct uart_periph *uart , struct sbus_buffer 
 		}
 		if( sbus_b->frame_available == TRUE ){
 			pwm_recovery_rcs(sbus_b->rc_chans , SBUS_MAX_RC_COUNT);
-			/*
-			for(int j=0; j< SBUS_MAX_RC_COUNT; j++) log("%d,",sbus_b->rc_chans[j]);
-			log("\r\n");
-			*/
-			sys_time_msleep(10);
 			sbus_b->frame_available = FALSE;
 			call_signel_connected();
 		}
 	}
 }
+#if CRC_SBUS_IN_DEBUG
+inline void crc_sbus_in_uart_debug()
+{
+	if( sys_time_check_and_ack_timer(crc_sbus_debug_t)) {
+#ifdef CRC_SBUS_0_IN_UART
+		if( crc_sbus0_uart_buf.frame_count>0)
+			crc_sbus0_uart_buf.rssi = (float)(crc_sbus0_uart_buf.frame_count-crc_sbus0_uart_buf.frame_decode_faile-crc_sbus0_uart_buf.frame_capture_faile)/crc_sbus0_uart_buf.frame_count ;
+		log("crc_sbus0 : decode error:%d, frame error:%d , all %d, %f\r\n", \
+			crc_sbus0_uart_buf.frame_decode_faile, \
+			crc_sbus0_uart_buf.frame_capture_faile, \
+			crc_sbus0_uart_buf.frame_count, \
+			crc_sbus0_uart_buf.rssi);
+		crc_sbus0_uart_buf.frame_decode_faile = 0;
+		crc_sbus0_uart_buf.frame_capture_faile = 0;
+		crc_sbus0_uart_buf.frame_count = 0;
+	#if 1
+		for(int j=0; j< SBUS_MAX_RC_COUNT; j++) log("%d,",crc_sbus0_uart_buf.rc_chans[j]);
+		log("\r\n");
+	#endif
+#endif
+#ifdef CRC_SBUS_1_IN_UART
+		if( crc_sbus1_uart_buf.frame_count>0)
+			crc_sbus1_uart_buf.rssi = (crc_sbus1_uart_buf.frame_count-crc_sbus1_uart_buf.frame_decode_faile-crc_sbus1_uart_buf.frame_capture_faile)/crc_sbus1_uart_buf.frame_count ;
+		log("crc_sbus0 : decode error:%d, frame error:%d , all %d, %f\r\n", \
+			crc_sbus1_uart_buf.frame_decode_faile, \
+			crc_sbus1_uart_buf.frame_capture_faile, \
+			crc_sbus1_uart_buf.frame_count, \
+			crc_sbus1_uart_buf.rssi);
+		crc_sbus1_uart_buf.frame_decode_faile = 0;
+		crc_sbus1_uart_buf.frame_capture_faile = 0;
+		crc_sbus1_uart_buf.frame_count = 0;
+	#if 1
+		for(int j=0; j< SBUS_MAX_RC_COUNT; j++) log("%d,",crc_sbus1_uart_buf.rc_chans[j]);
+		log("\r\n");
+	#endif
+#endif
+	}
+}
+#endif
 
 
 #if USE_FAKE_RC_IN
@@ -272,6 +313,9 @@ inline void loop()
 #endif
 #ifdef CRC_SBUS_OUT_UART
 	crc_sbus_out_loop();
+#endif
+#if CRC_SBUS_IN_DEBUG
+	crc_sbus_in_uart_debug();
 #endif
 }
 
