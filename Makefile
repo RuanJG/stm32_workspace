@@ -22,18 +22,19 @@ C_SRC+= src/app_main.c
 C_SRC+= src/sbus.c
 CFLAGS += -DUSE_PIX_SBUS_PROTOCOL=1
 C_SRC+= src/crc_sbus.c
+C_SRC+= src/mini_sbus.c
 C_SRC+= src/protocol.c
 
 
 
 #####################  debug
-ifeq  (1,0)
+ifeq  (1,1)
 CFLAGS += -DUSE_UART1=1
 CFLAGS += -DUART1_BAUD=115200
 endif
 
 ####################sbus output
-ifeq  (1,1)
+ifeq  (1,0)
 CFLAGS += -DSBUS_OUT_UART=uart1
 CFLAGS += -DSBUS_OUT_UART_USE_RECIVE_BUFF=1 #CRC_SBUS_0/1_IN_UART enable
 CFLAGS += -DUSE_UART1=1

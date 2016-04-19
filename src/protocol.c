@@ -10,6 +10,7 @@
 
 #include "sbus.h"
 #include "crc_sbus.h"
+#include "mini_sbus.h"
 #include "protocol.h"
 
 
@@ -17,7 +18,8 @@
 
 
 #define PROTOCOL_USE_SBUS 0
-#define PROTOCOL_USE_CRC_SBUS 1
+#define PROTOCOL_USE_CRC_SBUS 0
+#define PROTOCOL_USE_MINI_SBUS 1
 
 
 #if PROTOCOL_USE_CRC_SBUS
@@ -28,6 +30,9 @@
 #define protocol_parse parse_sbus_frame
 #define protocol_send send_sbus_out
 
+#elif PROTOCOL_USE_MINI_SBUS
+#define protocol_parse parse_mini_sbus_frame
+#define protocol_send send_mini_sbus_out
 #else 
 // error 
 #endif
@@ -43,8 +48,13 @@ int sbus_t;
 void protocol_send_func(uint8_t* data, int len)
 {
 	int i;
+	uint8_t flag;
 	for(i=0; i< len; i++){
+#if PROTOCOL_USE_MINI_SBUS
+		protocol_parse(data[i],&sbus_buf,&flag);
+#else
 		protocol_parse(data[i],&sbus_buf);
+#endif
 	}
 }
 

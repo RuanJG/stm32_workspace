@@ -292,10 +292,16 @@ void setup()
 	fake_rc_in_setup();
 #endif
 
+#if 0
+	test_protocol_setup();
+#endif
+
 }
 inline void loop()
 {
-
+#if 0
+	test_protocol_loop();
+#endif
 #if USE_FAKE_RC_IN
 	fake_rc_in_loop();
 #endif
