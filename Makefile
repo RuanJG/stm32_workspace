@@ -84,7 +84,7 @@ CFLAGS += -DZFRAME_SENDER_USE_USB_CDCAM_CONFIG_UART=0
 #CFLAGS += -DZFRAME_RECIVER
 CFLAGS += -DUSE_PIX_SBUS_PROTOCOL=1
 
-
+CFLAGS += -w
 
 ##+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 ##++++++++++++++++++++++++++++++++++++++++++++++ copy the makefile in libopencm3-example: examples/stm32/f1/Makefile.include

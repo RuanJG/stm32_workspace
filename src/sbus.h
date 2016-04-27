@@ -29,14 +29,18 @@ bit0 = n/a
 
 #define SBUS_STATUS_UNINIT      0
 #define SBUS_STATUS_GOT_START   1
+#define SBUS_FRAME_BUFF_SIZE 48
 struct sbus_buffer {
   uint16_t rc_chans[SBUS_MAX_RC_COUNT]; ///< decoded values
   bool_t frame_available;           ///< new frame available
-  uint8_t buffer[SBUS_FRAME_SIZE+2];  ///< input buffer
+  uint8_t buffer[SBUS_FRAME_BUFF_SIZE];  ///< input buffer
   uint8_t idx;                      ///< input index
   uint8_t status;                   ///< decoder state machine status
   uint16_t frame_capture_faile;
   uint16_t frame_decode_faile;
+  uint16_t frame_count;
+  float rssi;
+  uint8_t flag;                      ///sbus frame flag for save
 };
 /*
  * S.bus decoder matrix.

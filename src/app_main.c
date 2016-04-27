@@ -836,11 +836,29 @@ uint16_t get_rc_for_reciver(id)
 
 #include "sbus.h"
 #include "crc_sbus.h"
+#include "mini_sbus.h"
 static uint8_t crc_sbus_out_oframe[CRC_SBUS_FRAME_SIZE] = { 0x0f };
+uint16_t sbus_8_chans_buff[8];
 void send_crc_sbus_by_uart( struct uart_periph *uart, uint16_t *rc_chans, int count)
 {
+#if 0
 	encode_crc_sbus_frame(rc_chans, count , crc_sbus_out_oframe);
 	do_uart_wirte(uart,crc_sbus_out_oframe, CRC_SBUS_FRAME_SIZE);	
+#else
+	int i;
+	int res_count = count%8;
+	int all_frame = count/8;
+
+	for( i=0; i< all_frame; i++){
+		encode_mini_sbus_frame(&rc_chans[i*8], 8 , i ,  crc_sbus_out_oframe);
+		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
+	}
+	if( res_count > 0 ){
+		encode_mini_sbus_frame(&rc_chans[i*8], res_count , i, crc_sbus_out_oframe);
+		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
+	}
+
+#endif
 }
 
 
@@ -1277,13 +1295,13 @@ void update_pin_status()
 void exti4_isr(void)
 {
 	update_pin_status();
-	//log ("4= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
+	log ("4= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
 	exti_reset_request(EXTI4);
 }
 void exti9_5_isr(void)
 {
 	update_pin_status();
-	//log ("5= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
+	log ("5= %x \r\n",gpio_port_read(GPIOB)& (GPIO4|GPIO5));
 	exti_reset_request(EXTI5);
 
 }
@@ -1616,7 +1634,7 @@ void zframe_sender_setup()
 #endif
 
 	//57600: 1/150  115200: 1/500 2250000: 1000
-	sendrc_tid = sys_time_register_timer(1.0/100,NULL);	
+	sendrc_tid = sys_time_register_timer(0.009,NULL);	
 	//sendrc_tid = sys_time_register_timer(1.0/1000,NULL);	
 	status_tid =sys_time_register_timer(1.0,NULL);		
 	view_rc_tid =sys_time_register_timer(1.0/40,NULL);		
@@ -1655,6 +1673,7 @@ void zframe_sender_loop()
 		rc_value_list[RC_THR_ID] = RC_MIN_VALUE + handset_irq_counter*10;
 		if( rc_value_list[RC_THR_ID] < RC_MIN_VALUE ) rc_value_list[RC_THR_ID]=RC_MIN_VALUE;
 		if( rc_value_list[RC_THR_ID] > RC_MAX_VALUE ) rc_value_list[RC_THR_ID]=RC_MAX_VALUE;
+		log("c=%d\r\n",handset_irq_counter);
 		#endif
 		//send_rc_to_reciver_by_uart();
 		send_crc_sbus_by_uart(&uart2,rc_value_list,RC_MAX_COUNT);
