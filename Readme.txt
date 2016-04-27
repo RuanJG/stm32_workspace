@@ -59,3 +59,8 @@ if (read rc from uart){
 if ( ! tim5 ){
 	use uart2 is valiable
 }
+
+
+sbus : [0x0f][16*11bit= 16 channel data][flag][0x0]  ; 25Byte/frame 
+crc_sbus: [0x0f][16*11bit= 16 channel data][flag][crc_l][crc_h][0x0]   ; 27 Byte/frame
+mini_sbus: [0x0f][8*11bit= 8 channel data][flag][crc_l][crc_h][0x0]  ; 16 Byte/frame, flag[b0-b3]=channel_frame, 0-7 channel = 0x0; 8-15 channel = 0x1 .....
