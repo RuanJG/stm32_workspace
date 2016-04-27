@@ -50,11 +50,7 @@ void protocol_send_func(uint8_t* data, int len)
 	int i;
 	uint8_t flag;
 	for(i=0; i< len; i++){
-#if PROTOCOL_USE_MINI_SBUS
-		protocol_parse(data[i],&sbus_buf,&flag);
-#else
 		protocol_parse(data[i],&sbus_buf);
-#endif
 	}
 }
 

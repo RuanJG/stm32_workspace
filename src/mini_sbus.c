@@ -47,15 +47,15 @@ uint16_t mini_sbus_crc_calculate(const uint8_t* pBuffer, uint16_t length)
 
 
 // values [num_values] : the rcs for encode to frame
-// frame_channel : the sbus flag bit[0-3] 0~15 , frame_channel[0] = channel (1,2,3,4,5,6,7,8) 
+// frame_channel_flag : the sbus flag bit[0-3] 0~15 , frame_channel[0] = channel (1,2,3,4,5,6,7,8) 
 // 			frame_channel[1] = channel ( 9,10,11,12,13,14,15,16 ) ...
-void encode_mini_sbus_frame(uint16_t *values, uint16_t num_values, int frame_channel, uint8_t *oframe)
+void encode_mini_sbus_frame(uint16_t *values, uint16_t num_values, int frame_channel_flag, uint8_t *oframe)
 {
 	uint16_t crc;
   	//memset(oframe, 0x0, CRC_SBUS_FRAME_SIZE);
 	encode_sbus_frame(values,num_values,oframe);
-	if( frame_channel < 0x0f )
-		oframe[MINI_SBUS_FLAG_IDX]= frame_channel;
+	if( frame_channel_flag < 0x0f )
+		oframe[MINI_SBUS_FLAG_IDX]= frame_channel_flag;
 	else
 		oframe[MINI_SBUS_FLAG_IDX]= 0;
 	crc = mini_sbus_crc_calculate(oframe, MINI_SBUS_CRC_DATA_SIZE);

@@ -18,10 +18,11 @@
 uint16_t mini_sbus_crc_calculate(const uint8_t* pBuffer, uint16_t length);
 void encode_mini_sbus_frame(uint16_t *values, uint16_t num_values, int frame_channel, uint8_t *oframe);
 void send_mini_sbus_out (uint16_t *rc_chans, uint16_t rc_count, void (*cb)(uint8_t * data, int len));
-inline int parse_mini_sbus_frame(uint8_t rbyte , struct sbus_buffer *sbus_p, uint8_t *flag)
+inline int parse_mini_sbus_frame(uint8_t rbyte , struct sbus_buffer *sbus_p)
 {
       uint8_t ret = 0;
       uint16_t crc,crc_cal;
+      uint8_t flag;
 
       switch (sbus_p->status) {
         case SBUS_STATUS_UNINIT:
@@ -39,14 +40,22 @@ inline int parse_mini_sbus_frame(uint8_t rbyte , struct sbus_buffer *sbus_p, uin
           if (sbus_p->idx == MINI_SBUS_FRAME_SIZE) {
             // Decode if last byte is the correct end byte
             if (rbyte == SBUS_END_BYTE) {
+	    	sbus_p->frame_count++;
 		crc = sbus_p->buffer[MINI_SBUS_CRC_L_IDX] | (sbus_p->buffer[MINI_SBUS_CRC_H_IDX]<<8);
 		crc_cal = mini_sbus_crc_calculate(sbus_p->buffer,MINI_SBUS_CRC_DATA_SIZE);
 		if( crc == crc_cal ){
-			*flag = sbus_p->buffer[MINI_SBUS_FLAG_IDX];
+			flag = sbus_p->buffer[MINI_SBUS_FLAG_IDX];
 			memset(&sbus_p->buffer[MINI_SBUS_FLAG_IDX],0,SBUS_FRAME_BUFF_SIZE-MINI_SBUS_FLAG_IDX);
+			sbus_p->buffer[SBUS_FLAGS_BYTE_IDX]= flag & 0xf0;
+			sbus_p->flag = flag;
               		decode_sbus_frame(sbus_p->buffer, sbus_p->rc_chans, &sbus_p->frame_available);
 	      		ret = 1;
 		}else{
+			/*
+			for( int i=0; i< MINI_SBUS_FRAME_SIZE; i++)
+				printf("%x,\r\n",sbus_p->buffer[i]);
+			printf("\r\n");
+			*/
 			if(sbus_p->frame_decode_faile < 0x7fff )
 				sbus_p->frame_decode_faile ++;
 		}

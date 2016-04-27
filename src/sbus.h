@@ -40,6 +40,7 @@ struct sbus_buffer {
   uint16_t frame_decode_faile;
   uint16_t frame_count;
   float rssi;
+  uint8_t flag;                      ///sbus frame flag for save
 };
 /*
  * S.bus decoder matrix.

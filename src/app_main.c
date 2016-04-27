@@ -11,6 +11,7 @@
 #include "sbus.h"
 #include "pwm.h"
 #include "crc_sbus.h"
+#include "mini_sbus.h"
 
 #define CONSOLE_UART &uart1
 
@@ -179,11 +180,19 @@ inline void crc_sbus_in_uart_loop(struct uart_periph *uart , struct sbus_buffer 
 	data_len = uart_char_available(uart);
 	if( data_len > 0 ){
 		for( i=0; i< data_len ; i++){
+#if USE_CRC_MINI_SBUS_IN
+			if( 1==  parse_mini_sbus_frame(uart_getch(uart), sbus_b ) ){
+#else
 			if( 1==  parse_crc_sbus_frame(uart_getch(uart), sbus_b ) ){
+#endif
 			#ifdef SBUS_OUT_UART
 				#if SBUS_OUT_UART_USE_RECIVE_BUFF
-				memcpy(sbus_out_oframe,sbus_b->buffer,SBUS_FRAME_SIZE);
-				sbus_out_oframe[SBUS_END_BYTE_IDX] = SBUS_END_BYTE;
+				if( USE_CRC_MINI_SBUS_IN ==1 && ((sbus_b->flag&0x0f) != 0) ){
+					;//if mini sbus , just output 0-8 channel
+				}else{
+					memcpy(sbus_out_oframe,sbus_b->buffer,SBUS_FRAME_SIZE);
+					sbus_out_oframe[SBUS_END_BYTE_IDX] = SBUS_END_BYTE;
+				}
 				#endif
 			#endif
 			}
@@ -218,7 +227,7 @@ inline void crc_sbus_in_uart_debug()
 #ifdef CRC_SBUS_1_IN_UART
 		if( crc_sbus1_uart_buf.frame_count>0)
 			crc_sbus1_uart_buf.rssi = (crc_sbus1_uart_buf.frame_count-crc_sbus1_uart_buf.frame_decode_faile-crc_sbus1_uart_buf.frame_capture_faile)/crc_sbus1_uart_buf.frame_count ;
-		log("crc_sbus0 : decode error:%d, frame error:%d , all %d, %f\r\n", \
+		log("crc_sbus1 : decode error:%d, frame error:%d , all %d, %f\r\n", \
 			crc_sbus1_uart_buf.frame_decode_faile, \
 			crc_sbus1_uart_buf.frame_capture_faile, \
 			crc_sbus1_uart_buf.frame_count, \

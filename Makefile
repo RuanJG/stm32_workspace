@@ -49,6 +49,7 @@ endif
 
 #################### crc_sbus input
 CFLAGS += -DCRC_SBUS_IN_DEBUG=1
+CFLAGS += -DUSE_CRC_MINI_SBUS_IN=1
 ifeq  (1,1)
 CFLAGS += -DCRC_SBUS_0_IN_UART=uart3
 CFLAGS += -DUSE_UART3=1
