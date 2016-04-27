@@ -37,6 +37,33 @@
 
 
 
+#include "sbus.h"
+#include "crc_sbus.h"
+#include "mini_sbus.h"
+static uint8_t crc_sbus_out_oframe[CRC_SBUS_FRAME_SIZE] = { 0x0f };
+uint16_t sbus_8_chans_buff[8];
+void send_crc_sbus_by_uart( struct uart_periph *uart, uint16_t *rc_chans, int count)
+{
+#if 0
+	encode_crc_sbus_frame(rc_chans, count , crc_sbus_out_oframe);
+	do_uart_wirte(uart,crc_sbus_out_oframe, CRC_SBUS_FRAME_SIZE);	
+#else
+	int i;
+	int res_count = count%8;
+	int all_frame = count/8;
+
+	for( i=0; i< all_frame; i++){
+		encode_mini_sbus_frame(&rc_chans[i*8], 8 , i ,  crc_sbus_out_oframe);
+		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
+	}
+	if( res_count > 0 ){
+		encode_mini_sbus_frame(&rc_chans[i*8], res_count , i, crc_sbus_out_oframe);
+		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
+	}
+
+#endif
+}
+
 
 
 
@@ -834,32 +861,7 @@ uint16_t get_rc_for_reciver(id)
 
 
 
-#include "sbus.h"
-#include "crc_sbus.h"
-#include "mini_sbus.h"
-static uint8_t crc_sbus_out_oframe[CRC_SBUS_FRAME_SIZE] = { 0x0f };
-uint16_t sbus_8_chans_buff[8];
-void send_crc_sbus_by_uart( struct uart_periph *uart, uint16_t *rc_chans, int count)
-{
-#if 0
-	encode_crc_sbus_frame(rc_chans, count , crc_sbus_out_oframe);
-	do_uart_wirte(uart,crc_sbus_out_oframe, CRC_SBUS_FRAME_SIZE);	
-#else
-	int i;
-	int res_count = count%8;
-	int all_frame = count/8;
 
-	for( i=0; i< all_frame; i++){
-		encode_mini_sbus_frame(&rc_chans[i*8], 8 , i ,  crc_sbus_out_oframe);
-		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
-	}
-	if( res_count > 0 ){
-		encode_mini_sbus_frame(&rc_chans[i*8], res_count , i, crc_sbus_out_oframe);
-		do_uart_wirte(uart,crc_sbus_out_oframe, MINI_SBUS_FRAME_SIZE);	
-	}
-
-#endif
-}
 
 
 #define ZFRAME_RCS_INT_COUNT 2 // RC_MAX_COUNT/3; as each int store 3 rc, (RC_MAX_COUNT/3)=2=int[2] ; (tag(16bit)+ 2*32bit+ crc(16bit)) = 10*8bit 
@@ -1153,6 +1155,36 @@ void send_rc_to_user()
 	send_data_by_uart(configUart,mavlink_buffer,len);
 #endif
 }
+void send_crc_sbus_mavlink_by_uart(struct uart_periph *uart)
+{
+	int id=0;
+	int len,idx=0;
+	mavlink_message_t msg;
+	mavlink_rc_channels_override_t packet;
+
+	packet.target_system=1;
+	packet.target_component=1;
+	packet.chan1_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan2_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan3_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan4_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan5_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan6_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan7_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+	packet.chan8_raw= crc_sbus_out_oframe[idx++]|(crc_sbus_out_oframe[idx++]<<8);
+
+	mavlink_msg_rc_channels_override_encode(255, 109,  &msg, &packet);
+	len = mavlink_msg_to_send_buffer(mavlink_buffer, &msg);
+#if ZFRAME_SENDER_USE_USB_CDCAM_CONFIG_UART
+	#if USE_SIMPLE_USB_SERIAL
+	simple_usb_serial_write_block(mavlink_buffer,len);
+	#endif
+#else
+	send_data_by_uart(uart,mavlink_buffer,len);
+#endif
+}
+
+
 void handle_zframe_packet_frome_reciver(uint8_t *data)
 {
 	int error,i;
@@ -1675,8 +1707,11 @@ void zframe_sender_loop()
 		if( rc_value_list[RC_THR_ID] > RC_MAX_VALUE ) rc_value_list[RC_THR_ID]=RC_MAX_VALUE;
 		log("c=%d\r\n",handset_irq_counter);
 		#endif
-		//send_rc_to_reciver_by_uart();
-		send_crc_sbus_by_uart(&uart2,rc_value_list,RC_MAX_COUNT);
+#if 0
+		send_rc_to_reciver_by_uart();
+#else
+		send_crc_sbus_by_uart(zframeSenderUart,rc_value_list,RC_MAX_COUNT);
+#endif
 		//t2 = get_sys_time_float();
 		//log("send time : %f\r\n",t1-t2);
 		
@@ -1694,7 +1729,12 @@ void zframe_sender_loop()
 #if USE_IMU60x0
 		imu_periodic();
 #endif
+	#if 1
 		send_rc_to_user();
+	#else
+		//to android
+		send_crc_sbus_mavlink_by_uart(configUart);
+	#endif
 		jostick_led_toggle();
 	#if USE_TIMER4_COUNTER_HANDSET
 		log("weith=%d,,times=%d, error=%d\r\n",trigger_weith,trigger_times,triggerError_times);

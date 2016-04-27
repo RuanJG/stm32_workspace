@@ -65,6 +65,8 @@ handset interrupt : pb4(A) pb5(B)
 TIMER2_COUNTER_HANDSET : pb8 pb9
 
 
+uart2 : config uart for user (android)
+uart3 : radio send out uart
 
 board used: 
 A11 a12 a8
